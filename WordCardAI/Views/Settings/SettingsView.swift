@@ -12,11 +12,14 @@ struct SettingsView: View {
     @EnvironmentObject var settingsService: SettingsService
     @EnvironmentObject var cardsViewModel: CardsViewModel
     @EnvironmentObject var collectionsViewModel: CollectionsViewModel
-    
+
+    @State private var showCSVBackup = false
+
     var body: some View {
         Form {
             aiSettingsSection
             dataSection
+            csvSection
             appInfoSection
         }
         .navigationTitle("設定")
@@ -69,6 +72,25 @@ struct SettingsView: View {
         }
     }
     
+    private var csvSection: some View {
+        Section {
+            Button {
+                showCSVBackup = true
+            } label: {
+                Label("CSV バックアップ／インポート", systemImage: "doc.text")
+            }
+        } header: {
+            Text("データ管理")
+        } footer: {
+            Text("全カードを CSV 形式でエクスポートしたり、CSV ファイルから単語帳にインポートできます")
+        }
+        .sheet(isPresented: $showCSVBackup) {
+            CSVBackupView()
+                .environmentObject(cardsViewModel)
+                .environmentObject(collectionsViewModel)
+        }
+    }
+
     private var appInfoSection: some View {
         Section {
             HStack {
