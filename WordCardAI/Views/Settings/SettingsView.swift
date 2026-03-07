@@ -33,6 +33,11 @@ struct SettingsView: View {
                 }
             }
         }
+        .sheet(isPresented: $showCSVBackup) {
+            CSVBackupView()
+                .environmentObject(cardsViewModel)
+                .environmentObject(collectionsViewModel)
+        }
     }
     
     private var aiSettingsSection: some View {
@@ -83,11 +88,6 @@ struct SettingsView: View {
             Text("データ管理")
         } footer: {
             Text("全カードを CSV 形式でエクスポートしたり、CSV ファイルから単語帳にインポートできます")
-        }
-        .sheet(isPresented: $showCSVBackup) {
-            CSVBackupView()
-                .environmentObject(cardsViewModel)
-                .environmentObject(collectionsViewModel)
         }
     }
 
