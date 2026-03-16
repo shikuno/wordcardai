@@ -80,7 +80,7 @@ struct CSVBackupView: View {
                 Text("全カードを CSV ファイルとして書き出します。")
                     .font(.caption)
                     .foregroundColor(.secondary)
-                Text("カラム: id / collectionId / japanese / english / candidates / note / tags / createdAt")
+                Text("カラム: Japanese（必須）/ English（必須）/ Comment（任意）/ Tags（任意・複数値は\"|\"区切り）")
                     .font(.caption2)
                     .foregroundColor(.secondary)
             }
@@ -107,7 +107,7 @@ struct CSVBackupView: View {
                 Text("CSV ファイルを読み込んで単語帳にカードを追加します。")
                     .font(.caption)
                     .foregroundColor(.secondary)
-                Text("先頭のヘッダー行は自動でスキップされます。collectionId 列が有効な UUID であればそのコレクションに追加されます。")
+                Text("先頭のヘッダー行は自動でスキップされます。Japanese・English は必須、Comment・Tags は省略可能です。")
                     .font(.caption2)
                     .foregroundColor(.secondary)
             }
@@ -115,7 +115,7 @@ struct CSVBackupView: View {
 
             // インポート先のコレクションを選択
             Picker("インポート先", selection: $selectedCollectionId) {
-                Text("自動（CSV の collectionId を使用）").tag(UUID?.none)
+                Text("先頭のコレクションに追加").tag(UUID?.none)
                 ForEach(collectionsViewModel.collections) { collection in
                     Text(collection.title).tag(UUID?.some(collection.id))
                 }
@@ -178,29 +178,14 @@ struct CSVBackupView: View {
                 defer { url.stopAccessingSecurityScopedResource() }
 
                 let csvString = try String(contentsOf: url, encoding: .utf8)
-                // インポート先 collectionId: ピッカーで選択されていれば優先、なければ CSV の値を使う
-                let fallbackId = collectionsViewModel.collections.first?.id ?? UUID()
-                let targetId = selectedCollectionId ?? fallbackId
+                // インポート先コレクション: ピッカーで選択、なければ先頭のコレクション
+                let targetId = selectedCollectionId
+                    ?? collectionsViewModel.collections.first?.id
+                    ?? UUID()
                 let cards = try CSVService.import(csvString: csvString, into: targetId)
 
                 for card in cards {
-                    // selectedCollectionId が指定されている場合は強制的に上書き
-                    let finalCard: WordCard
-                    if let overrideId = selectedCollectionId {
-                        finalCard = WordCard(
-                            id: card.id,
-                            collectionId: overrideId,
-                            japanese: card.japanese,
-                            english: card.english,
-                            candidates: card.candidates,
-                            note: card.note,
-                            tags: card.tags,
-                            createdAt: card.createdAt
-                        )
-                    } else {
-                        finalCard = card
-                    }
-                    cardsViewModel.createCard(finalCard)
+                    cardsViewModel.createCard(card)
                 }
 
                 alertMessage = "\(cards.count) 枚のカードをインポートしました"

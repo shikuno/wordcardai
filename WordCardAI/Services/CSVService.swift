@@ -1,3 +1,4 @@
+
 //
 //  CSVService.swift
 //  WordCardAI
@@ -10,26 +11,22 @@ import Foundation
 struct CSVService {
 
     // MARK: - カラム定義
+    // Japanese（必須）, English（必須）, Comment（任意）, Tags（任意・複数値は"|"区切り）
 
-    static let header = "id,collectionId,japanese,english,candidates,note,tags,createdAt"
+    static let header = "Japanese,English,Comment,Tags"
 
     // MARK: - エクスポート
 
     /// WordCard の配列を CSV 文字列に変換する（ヘッダー行付き）
     static func export(cards: [WordCard]) -> String {
         var lines = [header]
-        let formatter = ISO8601DateFormatter()
 
         for card in cards {
             let fields: [String] = [
-                card.id.uuidString,
-                card.collectionId.uuidString,
                 escaped(card.japanese),
                 escaped(card.english),
-                escaped(card.candidates.joined(separator: "|")),
                 escaped(card.note ?? ""),
-                escaped(card.tags.joined(separator: "|")),
-                formatter.string(from: card.createdAt)
+                escaped(card.tags.joined(separator: "|"))
             ]
             lines.append(fields.joined(separator: ","))
         }
@@ -40,7 +37,7 @@ struct CSVService {
     // MARK: - インポート
 
     /// CSV 文字列を WordCard の配列にパースする
-    /// - Parameter collectionId: インポート先のコレクション ID（CSV に collectionId があれば上書きしない）
+    /// - Parameter collectionId: インポート先のコレクション ID
     /// - Parameter csvString: パース対象の CSV 文字列
     static func `import`(csvString: String, into collectionId: UUID) throws -> [WordCard] {
         var lines = csvString.components(separatedBy: "\n")
@@ -51,8 +48,8 @@ struct CSVService {
             throw CSVError.emptyFile
         }
 
-        // 先頭がヘッダー行なら読み飛ばす
-        if lines.first?.lowercased().hasPrefix("id") == true {
+        // 先頭がヘッダー行なら読み飛ばす（"Japanese" または "japanese" で始まる行）
+        if lines.first?.lowercased().hasPrefix("japanese") == true {
             lines.removeFirst()
         }
 
@@ -60,38 +57,36 @@ struct CSVService {
             throw CSVError.emptyFile
         }
 
-        let formatter = ISO8601DateFormatter()
         var cards: [WordCard] = []
 
         for (index, line) in lines.enumerated() {
             let fields = parseCSVLine(line)
 
-            // 最低限 japanese と english があれば OK（他は省略可）
-            guard fields.count >= 4 else {
+            // Japanese と English は必須（最低2列）
+            guard fields.count >= 2 else {
                 throw CSVError.invalidFormat(line: index + 2)
             }
 
-            let id = UUID(uuidString: fields[0]) ?? UUID()
-            let csvCollectionId = UUID(uuidString: fields[safe: 1] ?? "") ?? collectionId
-            let japanese = unescaped(fields[safe: 2] ?? "")
-            let english = unescaped(fields[safe: 3] ?? "")
-            let candidatesRaw = unescaped(fields[safe: 4] ?? "")
-            let candidates = candidatesRaw.isEmpty ? [] : candidatesRaw.components(separatedBy: "|")
-            let noteRaw = unescaped(fields[safe: 5] ?? "")
+            let japanese = unescaped(fields[0])
+            let english   = unescaped(fields[1])
+
+            // Japanese・English が空文字の行はスキップ
+            guard !japanese.isEmpty, !english.isEmpty else {
+                throw CSVError.invalidFormat(line: index + 2)
+            }
+
+            let noteRaw = unescaped(fields[safe: 2] ?? "")
             let note: String? = noteRaw.isEmpty ? nil : noteRaw
-            let tagsRaw = unescaped(fields[safe: 6] ?? "")
+
+            let tagsRaw = unescaped(fields[safe: 3] ?? "")
             let tags = tagsRaw.isEmpty ? [] : tagsRaw.components(separatedBy: "|")
-            let createdAt = formatter.date(from: fields[safe: 7] ?? "") ?? Date()
 
             let card = WordCard(
-                id: id,
-                collectionId: csvCollectionId,
+                collectionId: collectionId,
                 japanese: japanese,
                 english: english,
-                candidates: candidates,
                 note: note,
-                tags: tags,
-                createdAt: createdAt
+                tags: tags
             )
             cards.append(card)
         }
