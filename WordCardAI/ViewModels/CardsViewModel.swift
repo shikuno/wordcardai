@@ -75,6 +75,16 @@ class CardsViewModel: ObservableObject {
     func cardCount(for collectionId: UUID) -> Int {
         allCards.filter { $0.collectionId == collectionId }.count
     }
+
+    func cards(for collectionId: UUID) -> [WordCard] {
+        allCards
+            .filter { $0.collectionId == collectionId }
+            .sorted { $0.createdAt > $1.createdAt }
+    }
+
+    func allStoredCards() -> [WordCard] {
+        allCards.sorted { $0.createdAt > $1.createdAt }
+    }
     
     private func saveCards() {
         do {

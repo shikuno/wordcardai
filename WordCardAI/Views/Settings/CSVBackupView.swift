@@ -13,24 +13,23 @@ struct CSVBackupView: View {
     @EnvironmentObject var collectionsViewModel: CollectionsViewModel
     @Environment(\.dismiss) private var dismiss
 
-    // エクスポート
     @State private var exportItem: CSVFile?
     @State private var showExporter = false
-
-    // インポート
     @State private var showImporter = false
-    @State private var selectedCollectionId: UUID?
-
-    // アラート
-    @State private var alertMessage = ""
-    @State private var showAlert = false
-    @State private var importSuccessCount = 0
+    @State private var exportCollectionId: UUID?
+    @State private var importCollectionId: UUID?
+    @State private var resultMessage = ""
+    @State private var skippedRows: [CSVImportSkippedRow] = []
+    @State private var showResultAlert = false
 
     var body: some View {
         NavigationStack {
             Form {
                 exportSection
                 importSection
+                if !skippedRows.isEmpty {
+                    skippedRowsSection
+                }
             }
             .navigationTitle("CSV バックアップ")
             #if os(iOS)
@@ -41,7 +40,6 @@ struct CSVBackupView: View {
                     Button("閉じる") { dismiss() }
                 }
             }
-            // エクスポート
             .fileExporter(
                 isPresented: $showExporter,
                 document: exportItem,
@@ -50,13 +48,12 @@ struct CSVBackupView: View {
             ) { result in
                 switch result {
                 case .success:
-                    alertMessage = "CSVファイルをエクスポートしました"
+                    resultMessage = "CSVファイルをエクスポートしました"
                 case .failure(let error):
-                    alertMessage = "エクスポート失敗: \(error.localizedDescription)"
+                    resultMessage = "エクスポート失敗: \(error.localizedDescription)"
                 }
-                showAlert = true
+                showResultAlert = true
             }
-            // インポート
             .fileImporter(
                 isPresented: $showImporter,
                 allowedContentTypes: [.commaSeparatedText, .plainText],
@@ -64,10 +61,17 @@ struct CSVBackupView: View {
             ) { result in
                 handleImport(result: result)
             }
-            .alert("完了", isPresented: $showAlert) {
+            .alert("CSV 処理結果", isPresented: $showResultAlert) {
                 Button("OK") {}
             } message: {
-                Text(alertMessage)
+                Text(resultMessage)
+            }
+            .onAppear {
+                cardsViewModel.loadAllCards()
+                collectionsViewModel.loadCollections()
+                if importCollectionId == nil {
+                    importCollectionId = collectionsViewModel.collections.first?.id
+                }
             }
         }
     }
@@ -76,11 +80,20 @@ struct CSVBackupView: View {
 
     private var exportSection: some View {
         Section {
+            if !collectionsViewModel.collections.isEmpty {
+                Picker("エクスポート対象", selection: $exportCollectionId) {
+                    Text("すべてのコレクション").tag(UUID?.none)
+                    ForEach(collectionsViewModel.collections) { collection in
+                        Text(collection.title).tag(UUID?.some(collection.id))
+                    }
+                }
+            }
+
             VStack(alignment: .leading, spacing: 8) {
-                Text("全カードを CSV ファイルとして書き出します。")
+                Text("出力カラム")
                     .font(.caption)
                     .foregroundColor(.secondary)
-                Text("カラム: Japanese（必須）/ English（必須）/ Comment（任意）/ Tags（任意・複数値は\"|\"区切り）")
+                Text(CSVService.columns.joined(separator: ", "))
                     .font(.caption2)
                     .foregroundColor(.secondary)
             }
@@ -89,13 +102,13 @@ struct CSVBackupView: View {
             Button {
                 prepareExport()
             } label: {
-                Label("全カードをエクスポート", systemImage: "square.and.arrow.up")
+                Label("CSV をエクスポート", systemImage: "square.and.arrow.up")
             }
-            .disabled(totalCardCount == 0)
+            .disabled(exportCards.isEmpty)
         } header: {
             Text("エクスポート")
         } footer: {
-            Text("合計 \(totalCardCount) 枚のカードが対象です")
+            Text("合計 \(exportCards.count) 枚のカードが対象です")
         }
     }
 
@@ -104,18 +117,16 @@ struct CSVBackupView: View {
     private var importSection: some View {
         Section {
             VStack(alignment: .leading, spacing: 8) {
-                Text("CSV ファイルを読み込んで単語帳にカードを追加します。")
+                Text("読み込みカラム")
                     .font(.caption)
                     .foregroundColor(.secondary)
-                Text("先頭のヘッダー行は自動でスキップされます。Japanese・English は必須、Comment・Tags は省略可能です。")
+                Text("Japanese, English は必須 / Comment, Tags は任意")
                     .font(.caption2)
                     .foregroundColor(.secondary)
             }
             .padding(.vertical, 4)
 
-            // インポート先のコレクションを選択
-            Picker("インポート先", selection: $selectedCollectionId) {
-                Text("先頭のコレクションに追加").tag(UUID?.none)
+            Picker("インポート先", selection: $importCollectionId) {
                 ForEach(collectionsViewModel.collections) { collection in
                     Text(collection.title).tag(UUID?.some(collection.id))
                 }
@@ -137,29 +148,51 @@ struct CSVBackupView: View {
         }
     }
 
+    // MARK: - Skipped Rows Section
+
+    private var skippedRowsSection: some View {
+        Section {
+            ForEach(skippedRows) { row in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("\(row.rowNumber)行目: \(row.reason.description)")
+                        .font(.subheadline)
+                    if !row.rawValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text(row.rawValue)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .textSelection(.enabled)
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+        } header: {
+            Text("スキップした行")
+        } footer: {
+            Text("フォーマット不正の行は読み込みを止めずにスキップします")
+        }
+    }
+
     // MARK: - Helpers
 
-    private var totalCardCount: Int {
-        collectionsViewModel.collections.reduce(0) {
-            $0 + cardsViewModel.cardCount(for: $1.id)
+    private var exportCards: [WordCard] {
+        if let exportCollectionId {
+            return cardsViewModel.cards(for: exportCollectionId)
         }
+        return cardsViewModel.allStoredCards()
     }
 
     private func exportFileName() -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyyMMdd_HHmmss"
-        return "wordcards_\(formatter.string(from: Date())).csv"
+        if let exportCollectionId,
+           let collection = collectionsViewModel.collections.first(where: { $0.id == exportCollectionId }) {
+            return "wordcards_\(collection.title)_\(formatter.string(from: Date())).csv"
+        }
+        return "wordcards_all_\(formatter.string(from: Date())).csv"
     }
 
     private func prepareExport() {
-        cardsViewModel.loadAllCards()
-        // allCards は private なので CardsViewModel 経由で全コレクションのカードを集める
-        var allCards: [WordCard] = []
-        for collection in collectionsViewModel.collections {
-            cardsViewModel.loadCards(for: collection.id)
-            allCards.append(contentsOf: cardsViewModel.cards)
-        }
-        let csv = CSVService.export(cards: allCards)
+        let csv = CSVService.export(cards: exportCards)
         exportItem = CSVFile(content: csv)
         showExporter = true
     }
@@ -167,8 +200,9 @@ struct CSVBackupView: View {
     private func handleImport(result: Result<[URL], Error>) {
         switch result {
         case .failure(let error):
-            alertMessage = "ファイルの読み込みに失敗しました: \(error.localizedDescription)"
-            showAlert = true
+            resultMessage = "ファイルの読み込みに失敗しました: \(error.localizedDescription)"
+            skippedRows = []
+            showResultAlert = true
         case .success(let urls):
             guard let url = urls.first else { return }
             do {
@@ -178,21 +212,26 @@ struct CSVBackupView: View {
                 defer { url.stopAccessingSecurityScopedResource() }
 
                 let csvString = try String(contentsOf: url, encoding: .utf8)
-                // インポート先コレクション: ピッカーで選択、なければ先頭のコレクション
-                let targetId = selectedCollectionId
+                let targetId = importCollectionId
                     ?? collectionsViewModel.collections.first?.id
                     ?? UUID()
-                let cards = try CSVService.import(csvString: csvString, into: targetId)
+                let importResult = try CSVService.import(csvString: csvString, into: targetId)
 
-                for card in cards {
+                for card in importResult.importedCards {
                     cardsViewModel.createCard(card)
                 }
+                cardsViewModel.loadAllCards()
 
-                alertMessage = "\(cards.count) 枚のカードをインポートしました"
-                showAlert = true
+                skippedRows = importResult.skippedRows
+                resultMessage = "\(importResult.importedCount) 枚をインポートしました"
+                if importResult.skippedCount > 0 {
+                    resultMessage += "\n\(importResult.skippedCount) 行をスキップしました"
+                }
+                showResultAlert = true
             } catch {
-                alertMessage = "インポート失敗: \(error.localizedDescription)"
-                showAlert = true
+                skippedRows = []
+                resultMessage = "インポート失敗: \(error.localizedDescription)"
+                showResultAlert = true
             }
         }
     }

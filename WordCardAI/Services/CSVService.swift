@@ -11,13 +11,12 @@ import Foundation
 struct CSVService {
 
     // MARK: - カラム定義
-    // Japanese（必須）, English（必須）, Comment（任意）, Tags（任意・複数値は"|"区切り）
 
-    static let header = "Japanese,English,Comment,Tags"
+    static let columns = ["Japanese", "English", "Comment", "Tags"]
+    static let header = columns.joined(separator: ",")
 
     // MARK: - エクスポート
 
-    /// WordCard の配列を CSV 文字列に変換する（ヘッダー行付き）
     static func export(cards: [WordCard]) -> String {
         var lines = [header]
 
@@ -36,67 +35,76 @@ struct CSVService {
 
     // MARK: - インポート
 
-    /// CSV 文字列を WordCard の配列にパースする
-    /// - Parameter collectionId: インポート先のコレクション ID
-    /// - Parameter csvString: パース対象の CSV 文字列
-    static func `import`(csvString: String, into collectionId: UUID) throws -> [WordCard] {
-        var lines = csvString.components(separatedBy: "\n")
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
+    static func `import`(csvString: String, into collectionId: UUID) throws -> CSVImportResult {
+        let normalized = csvString.replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+
+        var lines = normalized.components(separatedBy: "\n")
+        while lines.last?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == true {
+            lines.removeLast()
+        }
 
         guard !lines.isEmpty else {
             throw CSVError.emptyFile
         }
 
-        // 先頭がヘッダー行なら読み飛ばす（"Japanese" または "japanese" で始まる行）
-        if lines.first?.lowercased().hasPrefix("japanese") == true {
-            lines.removeFirst()
-        }
-
-        guard !lines.isEmpty else {
-            throw CSVError.emptyFile
+        var startIndex = 0
+        if let firstLine = lines.first,
+           parseCSVLine(firstLine).map({ $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }) == columns.map({ $0.lowercased() }) {
+            startIndex = 1
         }
 
         var cards: [WordCard] = []
+        var skippedRows: [CSVImportSkippedRow] = []
 
-        for (index, line) in lines.enumerated() {
+        for index in startIndex..<lines.count {
+            let line = lines[index]
+            let rowNumber = index + 1
+
+            if line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                skippedRows.append(CSVImportSkippedRow(rowNumber: rowNumber, rawValue: line, reason: .emptyLine))
+                continue
+            }
+
             let fields = parseCSVLine(line)
-
-            // Japanese と English は必須（最低2列）
             guard fields.count >= 2 else {
-                throw CSVError.invalidFormat(line: index + 2)
+                skippedRows.append(CSVImportSkippedRow(rowNumber: rowNumber, rawValue: line, reason: .missingRequiredColumns))
+                continue
             }
 
-            let japanese = unescaped(fields[0])
-            let english   = unescaped(fields[1])
+            let japanese = unescaped(fields[0]).trimmingCharacters(in: .whitespacesAndNewlines)
+            let english = unescaped(fields[1]).trimmingCharacters(in: .whitespacesAndNewlines)
 
-            // Japanese・English が空文字の行はスキップ
             guard !japanese.isEmpty, !english.isEmpty else {
-                throw CSVError.invalidFormat(line: index + 2)
+                skippedRows.append(CSVImportSkippedRow(rowNumber: rowNumber, rawValue: line, reason: .missingRequiredValues))
+                continue
             }
 
-            let noteRaw = unescaped(fields[safe: 2] ?? "")
+            let noteRaw = unescaped(fields[safe: 2] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             let note: String? = noteRaw.isEmpty ? nil : noteRaw
 
             let tagsRaw = unescaped(fields[safe: 3] ?? "")
-            let tags = tagsRaw.isEmpty ? [] : tagsRaw.components(separatedBy: "|")
+            let tags = tagsRaw
+                .components(separatedBy: "|")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
 
-            let card = WordCard(
-                collectionId: collectionId,
-                japanese: japanese,
-                english: english,
-                note: note,
-                tags: tags
+            cards.append(
+                WordCard(
+                    collectionId: collectionId,
+                    japanese: japanese,
+                    english: english,
+                    note: note,
+                    tags: tags
+                )
             )
-            cards.append(card)
         }
 
-        return cards
+        return CSVImportResult(importedCards: cards, skippedRows: skippedRows)
     }
 
     // MARK: - Private Helpers
 
-    /// RFC 4180 準拠の CSV フィールドをエスケープ
     private static func escaped(_ value: String) -> String {
         if value.contains(",") || value.contains("\"") || value.contains("\n") {
             return "\"" + value.replacingOccurrences(of: "\"", with: "\"\"") + "\""
@@ -113,7 +121,6 @@ struct CSVService {
         return v
     }
 
-    /// CSV の 1 行をフィールド配列にパース（クォート対応）
     private static func parseCSVLine(_ line: String) -> [String] {
         var fields: [String] = []
         var current = ""
@@ -152,6 +159,38 @@ struct CSVService {
     }
 }
 
+struct CSVImportResult {
+    let importedCards: [WordCard]
+    let skippedRows: [CSVImportSkippedRow]
+
+    var importedCount: Int { importedCards.count }
+    var skippedCount: Int { skippedRows.count }
+}
+
+struct CSVImportSkippedRow: Identifiable {
+    let id = UUID()
+    let rowNumber: Int
+    let rawValue: String
+    let reason: CSVImportSkipReason
+}
+
+enum CSVImportSkipReason: String {
+    case emptyLine
+    case missingRequiredColumns
+    case missingRequiredValues
+
+    var description: String {
+        switch self {
+        case .emptyLine:
+            return "空行のためスキップ"
+        case .missingRequiredColumns:
+            return "Japanese / English 列が不足しているためスキップ"
+        case .missingRequiredValues:
+            return "Japanese または English が空のためスキップ"
+        }
+    }
+}
+
 // MARK: - Array safe subscript
 
 private extension Array {
@@ -164,14 +203,11 @@ private extension Array {
 
 enum CSVError: LocalizedError {
     case emptyFile
-    case invalidFormat(line: Int)
 
     var errorDescription: String? {
         switch self {
         case .emptyFile:
             return "CSVファイルにデータがありません"
-        case .invalidFormat(let line):
-            return "\(line)行目のフォーマットが正しくありません（最低4列必要です: id, collectionId, japanese, english）"
         }
     }
 }
