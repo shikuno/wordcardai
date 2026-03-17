@@ -8,7 +8,11 @@ import FoundationModels
 class FoundationModelsTranslationService: TranslationServiceProtocol {
     
     func generateCandidates(from japanese: String, count: Int) async throws -> [String] {
-        let trimmed = japanese.trimmingCharacters(in: .whitespacesAndNewlines)
+        // 改行・タブ・連続スペースをすべて半角スペース1つに正規化して1行にする
+        let trimmed = japanese
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
         guard !trimmed.isEmpty else {
             throw TranslationError.emptyInput
         }
@@ -16,7 +20,8 @@ class FoundationModelsTranslationService: TranslationServiceProtocol {
         // --- プロンプト組み立て ---
         let prompt = """
         以下の日本語文を、自然な英語文に翻訳してください。
-        必ず 3 通りの異なる英語訳を出力してください。
+        ネイティブが日常的に使う表現を意識し、フォーマル・カジュアル・一般的な言い回しなど、異なるスタイルのバリエーションを \(count) 通り提供してください。
+        必ず \(count) 通りの異なる英語訳を出力してください。
 
         出力例（この形式を厳守してください）:
         I’m on my way.
@@ -26,7 +31,7 @@ class FoundationModelsTranslationService: TranslationServiceProtocol {
         出力形式のルール:
         - 英語の文のみを書く
         - 1 行につき 1 文だけ書く
-        - ちょうど 3 行だけ出力する
+        - ちょうど \(count) 行だけ出力する
         - 行頭に番号や記号（1.、-、• など）は絶対に書かない
         - 説明文やコメント、日本語は書かない
         - 前後に余計な文字やコメントを書かない
