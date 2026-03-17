@@ -21,6 +21,22 @@ final class CollectionPlaybackViewModel: ObservableObject {
 
     private let speechService: SpeechService
 
+    let playbackPresets: [Double] = [0.4, 0.5, 0.6, 0.7]
+
+    var playbackSpeedText: String {
+        String(format: "%.1fx", playbackRate)
+    }
+
+    var autoAdvanceDelayText: String {
+        if autoAdvanceDelay == 0 {
+            return "0秒"
+        }
+        if autoAdvanceDelay.truncatingRemainder(dividingBy: 1) == 0 {
+            return "\(Int(autoAdvanceDelay))秒"
+        }
+        return String(format: "%.1f秒", autoAdvanceDelay)
+    }
+
     init(cards: [WordCard], speechService: SpeechService? = nil) {
         self.cards = cards
         self.speechService = speechService ?? SpeechService.shared

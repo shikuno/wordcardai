@@ -35,4 +35,28 @@ class SettingsService: ObservableObject {
         newSettings.candidateCount = min(max(count, 1), 5)
         updateSettings(newSettings)
     }
+    
+    func updatePlaybackRate(_ rate: Double) {
+        var newSettings = settings
+        newSettings.playbackRate = min(max(rate, 0.3), 0.72)
+        updateSettings(newSettings)
+    }
+
+    func updatePlaybackSpeechTarget(_ rawValue: String) {
+        var newSettings = settings
+        newSettings.playbackSpeechTargetRawValue = rawValue
+        updateSettings(newSettings)
+    }
+
+    func updatePlaybackAutoAdvanceDelay(_ delay: Double) {
+        var newSettings = settings
+        newSettings.playbackAutoAdvanceDelay = min(max(delay, 0), 10)
+        updateSettings(newSettings)
+    }
+
+    func updateHasSeenCardFlipHint(_ hasSeen: Bool) {
+        var newSettings = settings
+        newSettings.hasSeenCardFlipHint = hasSeen
+        updateSettings(newSettings)
+    }
 }
