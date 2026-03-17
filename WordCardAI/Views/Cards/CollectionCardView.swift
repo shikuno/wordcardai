@@ -131,8 +131,9 @@ struct CollectionCardView: View {
     // MARK: - Header
 
     private var headerSection: some View {
-        HStack(alignment: .center) {
-            VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 10) {
+            // 上段：ステータスバッジ + 枚数
+            HStack(alignment: .center) {
                 if let card = playbackViewModel.currentCard {
                     Text(card.learningStatus.displayName)
                         .font(.caption.weight(.semibold))
@@ -142,11 +143,43 @@ struct CollectionCardView: View {
                         .foregroundColor(.blue)
                         .clipShape(Capsule())
                 }
+                Spacer()
+                Text(playbackViewModel.progressText)
+                    .font(.subheadline.monospacedDigit())
+                    .foregroundColor(.secondary)
             }
-            Spacer()
-            Text(playbackViewModel.progressText)
-                .font(.subheadline.monospacedDigit())
-                .foregroundColor(.secondary)
+
+            // 下段：ジャンプスライダー（10枚以上のとき表示）
+            if playbackViewModel.cards.count >= 10 {
+                cardJumpSlider
+            }
+        }
+    }
+
+    private var cardJumpSlider: some View {
+        let total = playbackViewModel.cards.count
+        // Slider は Double のみ受け付けるのでローカル Binding で変換
+        let sliderBinding = Binding<Double>(
+            get: { Double(playbackViewModel.currentIndex) },
+            set: { newVal in
+                let idx = Int(newVal.rounded())
+                guard idx != playbackViewModel.currentIndex else { return }
+                playbackViewModel.jumpTo(index: idx)
+            }
+        )
+
+        return VStack(spacing: 2) {
+            Slider(value: sliderBinding, in: 0...Double(total - 1), step: 1)
+                .tint(.blue)
+            HStack {
+                Text("1枚目")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                Spacer()
+                Text("\(total)枚目")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
         }
     }
 

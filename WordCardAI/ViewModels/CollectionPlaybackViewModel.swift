@@ -97,6 +97,13 @@ final class CollectionPlaybackViewModel: ObservableObject {
         }
     }
 
+    func jumpTo(index: Int) {
+        guard index >= 0, index < cards.count, index != currentIndex else { return }
+        stopPlayback()
+        currentIndex = index
+        isShowingBack = false
+    }
+
     func stopPlayback() {
         isPlaying = false
         speechService.stop()
