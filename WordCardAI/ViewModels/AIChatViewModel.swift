@@ -58,9 +58,14 @@ final class AIChatViewModel: ObservableObject {
                 }
                 let response = try await lmSession.respond(to: userMessage)
 
-                // レスポンスからテキストを取り出す
-                let raw = (response as? CustomStringConvertible)?.description ?? String(describing: response)
-                let text = extractContent(from: raw)
+                // respond(to:) は iOS 26+ では String を直接返す
+                let text: String
+                if let str = response as? String {
+                    text = str
+                } else {
+                    // フォールバック: description から rawContent を除いたテキストを取得
+                    text = extractContent(from: String(describing: response))
+                }
 
                 messages.append(ChatMessage(role: .assistant, text: text))
                 isLoading = false

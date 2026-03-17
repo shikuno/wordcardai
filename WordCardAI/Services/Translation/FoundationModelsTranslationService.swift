@@ -45,32 +45,31 @@ class FoundationModelsTranslationService: TranslationServiceProtocol {
                 let session = LanguageModelSession(instructions: instructions)
                 
                 let response = try await session.respond(to: prompt)
-                let raw = (response as? CustomStringConvertible)?.description ?? String(describing: response)
-                
-                print("🧾 Raw response from LLM:\n\(raw)")
-                
-                // --- rawContent の中身だけを抽出 ---
+
+                // respond(to:) は iOS 26+ では String を直接返す
                 let contentText: String
-                if let range = raw.range(of: #"rawContent: \".*?\""#, options: [.regularExpression]) {
-                    let segment = String(raw[range]) // 例: rawContent: "..."
-                    let prefix = "rawContent: \""
-                    if segment.hasPrefix(prefix), segment.hasSuffix("\"") {
-                        let startIdx = segment.index(segment.startIndex, offsetBy: prefix.count)
-                        let endIdx = segment.index(before: segment.endIndex) // 最後の " の手前
-                        contentText = String(segment[startIdx..<endIdx])
+                if let str = response as? String {
+                    contentText = str
+                } else {
+                    let raw = String(describing: response)
+                    if let range = raw.range(of: #"rawContent: \".*?\""#, options: [.regularExpression]) {
+                        let segment = String(raw[range])
+                        let prefix = "rawContent: \""
+                        if segment.hasPrefix(prefix), segment.hasSuffix("\"") {
+                            let startIdx = segment.index(segment.startIndex, offsetBy: prefix.count)
+                            let endIdx = segment.index(before: segment.endIndex)
+                            contentText = String(segment[startIdx..<endIdx])
+                        } else {
+                            contentText = raw
+                        }
                     } else {
                         contentText = raw
                     }
-                } else {
-                    // 見つからない場合は全文を使う
-                    contentText = raw
                 }
-                
+
                 print("🧾 Extracted contentText:\n\(contentText)")
-                
+
                 // --- contentText から候補を抽出 ---
-                // 典型的なフォーマット: "1. Hello\n2. Hi\n3. Greetings"
-                // 1) "\\n" を実際の改行に戻す
                 let normalized = contentText.replacingOccurrences(of: "\\n", with: "\n")
                 
                 // 2) 改行で分割（すでに "1. ..." 形式で行ごとになっていることを期待）
