@@ -7,6 +7,12 @@
 
 import SwiftUI
 import UniformTypeIdentifiers
+#if os(iOS)
+import UIKit
+#endif
+#if os(macOS)
+import AppKit
+#endif
 
 struct CSVBackupView: View {
     @EnvironmentObject var cardsViewModel: CardsViewModel
@@ -21,6 +27,8 @@ struct CSVBackupView: View {
     @State private var resultMessage = ""
     @State private var skippedRows: [CSVImportSkippedRow] = []
     @State private var showResultAlert = false
+    @State private var pendingImportResult: CSVImportResult?
+    @State private var showImportPreview = false
 
     var body: some View {
         NavigationStack {
@@ -65,6 +73,21 @@ struct CSVBackupView: View {
                 Button("OK") {}
             } message: {
                 Text(resultMessage)
+            }
+            .confirmationDialog("CSV を読み込みますか？", isPresented: $showImportPreview, titleVisibility: .visible) {
+                Button("読み込む") {
+                    executePendingImport()
+                }
+                Button("キャンセル", role: .cancel) {
+                    clearPendingImport()
+                }
+            } message: {
+                if let pendingImportResult {
+                    Text(importPreviewMessage(for: pendingImportResult))
+                }
+            }
+            .onDisappear {
+                clearPendingImport()
             }
             .onAppear {
                 cardsViewModel.loadAllCards()
@@ -152,6 +175,12 @@ struct CSVBackupView: View {
 
     private var skippedRowsSection: some View {
         Section {
+            Button {
+                copySkippedRowsSummary()
+            } label: {
+                Label("スキップ行をコピー", systemImage: "doc.on.doc")
+            }
+
             ForEach(skippedRows) { row in
                 VStack(alignment: .leading, spacing: 4) {
                     Text("\(row.rowNumber)行目: \(row.reason.description)")
@@ -206,34 +235,92 @@ struct CSVBackupView: View {
         case .success(let urls):
             guard let url = urls.first else { return }
             do {
-                guard url.startAccessingSecurityScopedResource() else {
-                    throw CSVError.emptyFile
+                let (csvString, didStartSecurityScope) = try readCSVString(from: url)
+                defer {
+                    if didStartSecurityScope {
+                        url.stopAccessingSecurityScopedResource()
+                    }
                 }
-                defer { url.stopAccessingSecurityScopedResource() }
 
-                let csvString = try String(contentsOf: url, encoding: .utf8)
                 let targetId = importCollectionId
                     ?? collectionsViewModel.collections.first?.id
                     ?? UUID()
                 let importResult = try CSVService.import(csvString: csvString, into: targetId)
 
-                for card in importResult.importedCards {
-                    cardsViewModel.createCard(card)
-                }
-                cardsViewModel.loadAllCards()
-
-                skippedRows = importResult.skippedRows
-                resultMessage = "\(importResult.importedCount) 枚をインポートしました"
-                if importResult.skippedCount > 0 {
-                    resultMessage += "\n\(importResult.skippedCount) 行をスキップしました"
-                }
-                showResultAlert = true
+                pendingImportResult = importResult
+                showImportPreview = true
             } catch {
                 skippedRows = []
                 resultMessage = "インポート失敗: \(error.localizedDescription)"
                 showResultAlert = true
             }
         }
+    }
+
+    private func executePendingImport() {
+        guard let pendingImportResult else {
+            clearPendingImport()
+            return
+        }
+
+        for card in pendingImportResult.importedCards {
+            cardsViewModel.createCard(card)
+        }
+        cardsViewModel.loadAllCards()
+
+        skippedRows = pendingImportResult.skippedRows
+        resultMessage = "\(pendingImportResult.importedCount) 枚をインポートしました"
+        if pendingImportResult.skippedCount > 0 {
+            resultMessage += "\n\(pendingImportResult.skippedCount) 行をスキップしました"
+        }
+        clearPendingImport()
+        showResultAlert = true
+    }
+
+    private func clearPendingImport() {
+        pendingImportResult = nil
+    }
+
+    private func importPreviewMessage(for result: CSVImportResult) -> String {
+        var lines = [
+            "取り込み予定: \(result.importedCount) 件",
+            "スキップ予定: \(result.skippedCount) 件"
+        ]
+        if let collection = collectionsViewModel.collections.first(where: { $0.id == importCollectionId }) {
+            lines.append("保存先: \(collection.title)")
+        }
+        if let firstSkipped = result.skippedRows.first {
+            lines.append("例: \(firstSkipped.rowNumber)行目は \(firstSkipped.reason.description)")
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    private func readCSVString(from url: URL) throws -> (String, Bool) {
+        let didStartSecurityScope = url.startAccessingSecurityScopedResource()
+        let csvString = try String(contentsOf: url, encoding: .utf8)
+        return (csvString, didStartSecurityScope)
+    }
+
+    private func copySkippedRowsSummary() {
+        let summary = skippedRows
+            .map { row in
+                let raw = row.rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                if raw.isEmpty {
+                    return "\(row.rowNumber)行目: \(row.reason.description)"
+                }
+                return "\(row.rowNumber)行目: \(row.reason.description)\n\(raw)"
+            }
+            .joined(separator: "\n\n")
+
+        #if os(iOS)
+        UIPasteboard.general.string = summary
+        #elseif os(macOS)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(summary, forType: .string)
+        #endif
+
+        resultMessage = "スキップした行をコピーしました"
+        showResultAlert = true
     }
 }
 
