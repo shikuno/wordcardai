@@ -18,27 +18,7 @@ class FoundationModelsTranslationService: TranslationServiceProtocol {
         }
         
         // --- プロンプト組み立て ---
-        let prompt = """
-        以下の日本語文を、自然な英語文に翻訳してください。
-        ネイティブが日常的に使う表現を意識し、フォーマル・カジュアル・一般的な言い回しなど、異なるスタイルのバリエーションを \(count) 通り提供してください。
-        必ず \(count) 通りの異なる英語訳を出力してください。
-
-        出力例（この形式を厳守してください）:
-        I’m on my way.
-        I’m coming now.
-        I’ll be there soon.
-
-        出力形式のルール:
-        - 英語の文のみを書く
-        - 1 行につき 1 文だけ書く
-        - ちょうど \(count) 行だけ出力する
-        - 行頭に番号や記号（1.、-、• など）は絶対に書かない
-        - 説明文やコメント、日本語は書かない
-        - 前後に余計な文字やコメントを書かない
-        - 改行は候補の区切りとしてのみ使う
-
-        日本語: \(trimmed)
-        """
+        let prompt = "Translate this Japanese sentence into \(count) different natural English sentences. Output exactly \(count) lines. Each line is one English sentence only. No numbers, no bullets, no markdown symbols (*, **, #, -, ~), no Japanese, no explanations. Plain text only. Japanese: \(trimmed)"
         
         print("\n===== FoundationModelsTranslationService =====")
         print("📝 Prompt to LLM:\n\(prompt)")
@@ -112,7 +92,6 @@ class FoundationModelsTranslationService: TranslationServiceProtocol {
                 // 4) 先頭の番号や箇条書き記号を削除
                 lines = lines.map { line in
                     var s = line
-                    // 例: "1. text", "1) text", "- text", "• text"
                     let patterns = ["^[0-9]+[\\).]*\\s*", "^[\\-•]\\s*"]
                     for pattern in patterns {
                         if let regex = try? NSRegularExpression(pattern: pattern, options: []) {
@@ -122,6 +101,26 @@ class FoundationModelsTranslationService: TranslationServiceProtocol {
                     }
                     return s.trimmingCharacters(in: .whitespacesAndNewlines)
                 }
+
+                // 4.5) マークダウン記号を除去（*, **, #, ~, _ など）
+                lines = lines.map { line in
+                    var s = line
+                    // **bold** や *italic* のアスタリスクを除去
+                    s = s.replacingOccurrences(of: "**", with: "")
+                    s = s.replacingOccurrences(of: "*", with: "")
+                    // # 見出し記号を除去
+                    if let r = try? NSRegularExpression(pattern: "^#+\\s*") {
+                        s = r.stringByReplacingMatches(in: s, range: NSRange(s.startIndex..., in: s), withTemplate: "")
+                    }
+                    // ~ や _ を除去
+                    s = s.replacingOccurrences(of: "~~", with: "")
+                    s = s.replacingOccurrences(of: "__", with: "")
+                    s = s.replacingOccurrences(of: "_", with: "")
+                    // バッククォートを除去
+                    s = s.replacingOccurrences(of: "`", with: "")
+                    return s.trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+                .filter { !$0.isEmpty }
                 
                 // 5) 英文らしさでフィルタリング
                 lines = lines.filter { Self.isLikelyEnglishSentence($0) }
@@ -179,27 +178,26 @@ class FoundationModelsTranslationService: TranslationServiceProtocol {
         if text.isEmpty { return false }
         
         // ひらがな・カタカナ・漢字が多い行は除外
-        let japaneseCharSet = CharacterSet(charactersIn: "ぁあぃいぅうぇえぉおかがきぎくぐけげこごさざしじすずせぜそぞただちぢっつづてでとどなにぬねのはばぱひびぴふぶぷへべぺほぼぽまみむめもゃやゅゆょよらりるれろわをん一-龠々〆ヵヶァ-ヴー")
+        let japaneseCharSet = CharacterSet(charactersIn: "ぁ-んァ-ヴ一-龠々〆")
         let jpCount = text.unicodeScalars.filter { japaneseCharSet.contains($0) }.count
         let total = text.unicodeScalars.count
-        if total > 0 && Double(jpCount) / Double(total) > 0.3 {
+        if total > 0 && Double(jpCount) / Double(total) > 0.2 {
             return false
         }
         
-        // 英字を含まない行は除外
-        let letterSet = CharacterSet.letters
-        if !text.unicodeScalars.contains(where: { letterSet.contains($0) }) {
+        // 英字を1文字も含まない行は除外
+        if !text.unicodeScalars.contains(where: { CharacterSet.letters.contains($0) }) {
             return false
         }
         
-        // 長さフィルタ
-        if text.count < 3 || text.count > 200 {
+        // 極端に短い or 長い行を除外
+        if text.count < 2 || text.count > 300 {
             return false
         }
         
         // 明らかなメタ行を除外
-        let bannedKeywords = ["Response<", "userPrompt", "assistant:", "system:"]
-        if bannedKeywords.contains(where: { text.localizedCaseInsensitiveContains($0) }) {
+        let banned = ["Response<", "userPrompt:", "assistant:", "system:"]
+        if banned.contains(where: { text.localizedCaseInsensitiveContains($0) }) {
             return false
         }
         
