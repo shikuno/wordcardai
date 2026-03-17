@@ -19,6 +19,7 @@ struct CollectionCardView: View {
     @State private var showingLearnMode = false
     @GestureState private var dragOffset: CGFloat = 0
     @State private var showFlipHint = false
+    @State private var editingCard: WordCard?
 
     init(collection: CardCollection, cardsViewModel: CardsViewModel, collectionsViewModel: CollectionsViewModel) {
         self.collection = collection
@@ -30,18 +31,21 @@ struct CollectionCardView: View {
     }
 
     var body: some View {
-        VStack(spacing: 18) {
-            if playbackViewModel.cards.isEmpty {
-                emptyStateView
-            } else {
-                headerSection
-                actionShortcutSection
-                cardSection
-                playbackSettingsSection
-                controlSection
+        ScrollView(showsIndicators: false) {
+            VStack(spacing: 18) {
+                if playbackViewModel.cards.isEmpty {
+                    emptyStateView
+                } else {
+                    headerSection
+                    actionShortcutSection
+                    cardSection
+                    playbackSettingsSection
+                    controlSection
+                }
             }
+            .padding()
+            .padding(.bottom, 24)
         }
-        .padding()
         .navigationTitle(collection.title)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -101,6 +105,14 @@ struct CollectionCardView: View {
             LearnModeView(cards: cardsViewModel.cards(for: collection.id)) { updatedCard in
                 cardsViewModel.replaceCard(updatedCard)
             }
+        }
+        .sheet(item: $editingCard, onDismiss: refreshCards) { card in
+            CreateEditCardView(
+                collection: collection,
+                cardsViewModel: cardsViewModel,
+                settingsService: settingsService,
+                card: card
+            )
         }
     }
 
@@ -165,36 +177,48 @@ struct CollectionCardView: View {
 
     private var cardSection: some View {
         GeometryReader { geometry in
-            let cardWidth = geometry.size.width * 0.82
-            let sideWidth = geometry.size.width * 0.12
+            let cardWidth = min(geometry.size.width * 0.8, 420)
+            let previewScale: CGFloat = 0.78
+            let previewWidth = cardWidth * previewScale
+            let previewOffset = cardWidth * 0.56
 
             ZStack {
-                if playbackViewModel.canGoPrevious {
-                    sidePreviewCard(direction: .previous)
-                        .frame(width: sideWidth)
-                        .offset(x: -(cardWidth / 2 + sideWidth * 0.55))
+                if let previousCard = previousCard {
+                    previewCard(previousCard, direction: .previous)
+                        .frame(width: previewWidth, height: 292)
+                        .offset(x: -previewOffset, y: 18)
                 }
 
                 currentInteractiveCard(width: cardWidth)
 
-                if playbackViewModel.canGoNext {
-                    sidePreviewCard(direction: .next)
-                        .frame(width: sideWidth)
-                        .offset(x: cardWidth / 2 + sideWidth * 0.55)
+                if let nextCard = nextCard {
+                    previewCard(nextCard, direction: .next)
+                        .frame(width: previewWidth, height: 292)
+                        .offset(x: previewOffset, y: 18)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(height: 370)
+        .frame(height: 390)
+    }
+
+    private var previousCard: WordCard? {
+        guard playbackViewModel.currentIndex > 0 else { return nil }
+        return playbackViewModel.cards[playbackViewModel.currentIndex - 1]
+    }
+
+    private var nextCard: WordCard? {
+        guard playbackViewModel.currentIndex + 1 < playbackViewModel.cards.count else { return nil }
+        return playbackViewModel.cards[playbackViewModel.currentIndex + 1]
     }
 
     private func currentInteractiveCard(width: CGFloat) -> some View {
         let card = playbackViewModel.currentCard
 
-        return ZStack {
+        return ZStack(alignment: .topTrailing) {
             RoundedRectangle(cornerRadius: 26)
                 .fill(Color.systemSecondaryBackgroundCompat)
-                .shadow(color: .black.opacity(0.08), radius: 10, y: 4)
+                .shadow(color: .black.opacity(0.12), radius: 14, y: 6)
 
             if let card {
                 VStack(spacing: 18) {
@@ -215,7 +239,20 @@ struct CollectionCardView: View {
                             .transition(.opacity.combined(with: .scale))
                     }
                 }
-                .padding()
+                .padding(.top, 44)
+                .padding(.horizontal)
+                .padding(.bottom)
+
+                Button {
+                    editingCard = card
+                } label: {
+                    Image(systemName: "square.and.pencil")
+                        .font(.headline)
+                        .padding(10)
+                        .background(.ultraThinMaterial)
+                        .clipShape(Circle())
+                }
+                .padding(16)
             }
 
             if showFlipHint {
@@ -235,6 +272,7 @@ struct CollectionCardView: View {
         .frame(width: width, height: 350)
         .offset(x: dragOffset)
         .rotationEffect(.degrees(Double(dragOffset / 24)))
+        .scaleEffect(1 - min(abs(dragOffset) / 1200, 0.04))
         .animation(.spring(response: 0.28, dampingFraction: 0.85), value: dragOffset)
         .contentShape(Rectangle())
         .onTapGesture {
@@ -257,15 +295,35 @@ struct CollectionCardView: View {
         )
     }
 
-    private func sidePreviewCard(direction: SidePreviewDirection) -> some View {
-        RoundedRectangle(cornerRadius: 20)
-            .fill(Color.systemTertiaryBackgroundCompat)
-            .overlay {
-                Image(systemName: direction == .previous ? "chevron.left" : "chevron.right")
+    private func previewCard(_ card: WordCard, direction: SidePreviewDirection) -> some View {
+        ZStack(alignment: direction == .previous ? .trailing : .leading) {
+            RoundedRectangle(cornerRadius: 22)
+                .fill(Color.systemTertiaryBackgroundCompat)
+                .shadow(color: .black.opacity(0.04), radius: 6, y: 3)
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text(card.japanese)
+                    .font(.headline)
+                    .lineLimit(3)
+                    .foregroundColor(.primary.opacity(0.75))
+                Text(card.english)
+                    .font(.subheadline)
+                    .lineLimit(2)
                     .foregroundColor(.secondary)
             }
-            .opacity(0.9)
-            .frame(height: 280)
+            .padding(18)
+
+            LinearGradient(
+                colors: direction == .previous
+                    ? [Color.clear, Color(.systemBackground).opacity(0.9)]
+                    : [Color(.systemBackground).opacity(0.9), Color.clear],
+                startPoint: direction == .previous ? .leading : .trailing,
+                endPoint: direction == .previous ? .trailing : .leading
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 22))
+        }
+        .scaleEffect(0.94)
+        .opacity(0.72)
     }
 
     private var playbackSettingsSection: some View {
@@ -280,10 +338,15 @@ struct CollectionCardView: View {
             }
             .pickerStyle(.segmented)
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Text("再生スピード")
-                        .font(.subheadline)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("再生スピード")
+                            .font(.subheadline)
+                        Text(playbackViewModel.playbackSpeedLabel)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                     Spacer()
                     Text(playbackViewModel.playbackSpeedText)
                         .font(.caption.weight(.semibold))
@@ -299,7 +362,7 @@ struct CollectionCardView: View {
                         Button {
                             playbackViewModel.playbackRate = preset
                         } label: {
-                            Text(String(format: "%.1fx", preset))
+                            Text(String(format: "%.2gx", preset))
                                 .font(.caption.weight(.semibold))
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 10)
@@ -310,6 +373,8 @@ struct CollectionCardView: View {
                         .buttonStyle(.plain)
                     }
                 }
+
+                Slider(value: $playbackViewModel.playbackRate, in: 0.25...2.0, step: 0.05)
             }
 
             VStack(alignment: .leading, spacing: 6) {

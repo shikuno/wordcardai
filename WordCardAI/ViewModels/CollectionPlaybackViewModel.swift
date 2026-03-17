@@ -21,10 +21,10 @@ final class CollectionPlaybackViewModel: ObservableObject {
 
     private let speechService: SpeechService
 
-    let playbackPresets: [Double] = [0.4, 0.5, 0.6, 0.7]
+    let playbackPresets: [Double] = [0.25, 0.5, 1.0, 1.5, 2.0]
 
     var playbackSpeedText: String {
-        String(format: "%.1fx", playbackRate)
+        String(format: "%.2gx", playbackRate)
     }
 
     var autoAdvanceDelayText: String {
@@ -59,12 +59,12 @@ final class CollectionPlaybackViewModel: ObservableObject {
         switch playbackRate {
         case ..<0.4:
             return "かなりゆっくり"
-        case ..<0.48:
+        case ..<0.75:
             return "ゆっくり"
-        case ..<0.58:
+        case ..<1.25:
             return "標準"
-        case ..<0.65:
-            return "やや速い"
+        case ..<1.75:
+            return "速い"
         default:
             return "かなり速い"
         }
