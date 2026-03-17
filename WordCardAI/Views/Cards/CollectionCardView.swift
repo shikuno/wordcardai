@@ -234,8 +234,8 @@ struct CollectionCardView: View {
     private func cardCell(card: WordCard, idx: Int, cardWidth: CGFloat, isCurrent: Bool) -> some View {
         ZStack {
             RoundedRectangle(cornerRadius: 18)
-                .fill(Color(uiColor: isCurrent ? .secondarySystemBackground : .tertiarySystemBackground))
-                .shadow(color: .black.opacity(isCurrent ? 0.10 : 0.04), radius: isCurrent ? 10 : 4, y: 4)
+                .fill(Color(uiColor: .secondarySystemBackground))
+                .shadow(color: .black.opacity(0.08), radius: 8, y: 3)
 
             if isCurrent {
                 VStack(spacing: 16) {
@@ -279,8 +279,6 @@ struct CollectionCardView: View {
             }
         }
         .frame(width: cardWidth, height: 290)
-        .scaleEffect(isCurrent ? 1.0 : 0.95)
-        .animation(.spring(response: 0.35, dampingFraction: 0.82), value: isCurrent)
     }
 
     // MARK: - Playback Controls（再生・学習モードを横並び）
