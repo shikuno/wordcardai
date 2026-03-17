@@ -357,7 +357,7 @@ struct CollectionCardView: View {
             HStack(alignment: .top, spacing: 12) {
                 // 表→裏の間隔
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("表→裏")
+                    Text("答えが出るまで")
                         .font(.caption)
                         .foregroundColor(.secondary)
                     Menu {
@@ -393,7 +393,7 @@ struct CollectionCardView: View {
 
                 // 裏→次カードの間隔
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("読み上げ後の間隔")
+                    Text("次へ進むまで")
                         .font(.caption)
                         .foregroundColor(.secondary)
                     Menu {
