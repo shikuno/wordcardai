@@ -30,27 +30,8 @@ class FoundationModelsTranslationService: TranslationServiceProtocol {
                 let session = LanguageModelSession(instructions: instructions)
                 
                 let response = try await session.respond(to: prompt)
-
-                // respond(to:) は iOS 26+ では String を直接返す
-                let contentText: String
-                if let str = response as? String {
-                    contentText = str
-                } else {
-                    let raw = String(describing: response)
-                    if let range = raw.range(of: #"rawContent: \".*?\""#, options: [.regularExpression]) {
-                        let segment = String(raw[range])
-                        let prefix = "rawContent: \""
-                        if segment.hasPrefix(prefix), segment.hasSuffix("\"") {
-                            let startIdx = segment.index(segment.startIndex, offsetBy: prefix.count)
-                            let endIdx = segment.index(before: segment.endIndex)
-                            contentText = String(segment[startIdx..<endIdx])
-                        } else {
-                            contentText = raw
-                        }
-                    } else {
-                        contentText = raw
-                    }
-                }
+                // Response<String>.content が本文
+                let contentText = response.content
 
                 print("🧾 Extracted contentText:\n\(contentText)")
 

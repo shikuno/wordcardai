@@ -196,12 +196,12 @@ struct MessageBubble: View {
                     .foregroundColor(.white)
                     .clipShape(RoundedRectangle(cornerRadius: 18))
             } else {
-                // AI側
                 ZStack {
                     Circle().fill(Color.blue).frame(width: 28, height: 28)
                     Image(systemName: "sparkles").font(.system(size: 12)).foregroundColor(.white)
                 }
-                Text(message.text)
+                // AI返答はマークダウンをレンダリング
+                Text(.init(message.text))
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
                     .background(Color(uiColor: .secondarySystemBackground))

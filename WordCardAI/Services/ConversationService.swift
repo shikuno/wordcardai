@@ -48,22 +48,8 @@ final class ConversationService {
                 instructions: "Output plain text only. Exactly 4 lines. No labels, no JSON, no markdown."
             )
             let response = try await session.respond(to: prompt)
-
-            // respond(to:) は iOS 26+ では String を直接返す
-            if let str = response as? String {
-                return str.replacingOccurrences(of: "\\n", with: "\n")
-            }
-            // フォールバック: rawContent パターンを試みる
-            let raw = String(describing: response)
-            if let range = raw.range(of: #"rawContent: \"(.*?)\""#, options: .regularExpression) {
-                let seg = String(raw[range])
-                let prefix = "rawContent: \""
-                if seg.hasPrefix(prefix) && seg.hasSuffix("\"") {
-                    return String(seg.dropFirst(prefix.count).dropLast())
-                        .replacingOccurrences(of: "\\n", with: "\n")
-                }
-            }
-            return raw.replacingOccurrences(of: "\\n", with: "\n")
+            // Response<String>.content が本文
+            return response.content
         }
         #endif
         throw ConversationError.notAvailable
