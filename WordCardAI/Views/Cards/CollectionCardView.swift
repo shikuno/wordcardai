@@ -17,6 +17,7 @@ struct CollectionCardView: View {
     @State private var showingList = false
     @State private var showingCreateCard = false
     @State private var showingLearnMode = false
+    @State private var showingConversation = false
     @GestureState private var dragOffset: CGFloat = 0
     @State private var showFlipHint = false
     @State private var editingCard: WordCard?
@@ -121,6 +122,12 @@ struct CollectionCardView: View {
             LearnModeView(cards: cardsViewModel.cards(for: collection.id)) { updatedCard in
                 cardsViewModel.replaceCard(updatedCard)
             }
+        }
+        .sheet(isPresented: $showingConversation) {
+            ConversationView(
+                cards: cardsViewModel.cards(for: collection.id),
+                collectionTitle: collection.title
+            )
         }
         .sheet(item: $editingCard, onDismiss: refreshCards) { card in
             CreateEditCardView(
@@ -237,43 +244,45 @@ struct CollectionCardView: View {
                 .fill(Color(uiColor: .secondarySystemBackground))
                 .shadow(color: .black.opacity(0.08), radius: 8, y: 3)
 
-            if isCurrent {
-                VStack(spacing: 16) {
-                    Spacer()
+            VStack(spacing: 16) {
+                Spacer()
 
-                    Text(card.japanese)
-                        .font(.title.bold())
+                // 表面テキストは常に表示（隣カードも薄く見える）
+                Text(card.japanese)
+                    .font(.title.bold())
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
+                    .opacity(isCurrent ? 1.0 : 0.35)
+
+                // 裏面は現在カードのみ
+                if isCurrent && playbackViewModel.isShowingBack {
+                    Divider().padding(.horizontal, 40)
+                    Text(card.english)
+                        .font(.title2)
+                        .foregroundColor(.blue)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 24)
-
-                    if playbackViewModel.isShowingBack {
-                        Divider().padding(.horizontal, 40)
-                        Text(card.english)
-                            .font(.title2)
-                            .foregroundColor(.blue)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 24)
-                            .transition(.opacity.combined(with: .move(edge: .bottom)))
-                    }
-
-                    Spacer()
-
-                    if showFlipHint {
-                        Text("タップで裏返す")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .padding(.bottom, 12)
-                            .transition(.opacity)
-                    }
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    withAnimation(.easeInOut(duration: 0.22)) {
-                        playbackViewModel.toggleSide()
-                        if showFlipHint {
-                            showFlipHint = false
-                            settingsService.updateHasSeenCardFlipHint(true)
-                        }
+
+                Spacer()
+
+                if isCurrent && showFlipHint {
+                    Text("タップで裏返す")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(.bottom, 12)
+                        .transition(.opacity)
+                }
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                guard isCurrent else { return }
+                withAnimation(.easeInOut(duration: 0.22)) {
+                    playbackViewModel.toggleSide()
+                    if showFlipHint {
+                        showFlipHint = false
+                        settingsService.updateHasSeenCardFlipHint(true)
                     }
                 }
             }
@@ -314,6 +323,20 @@ struct CollectionCardView: View {
                 .padding(.vertical, 13)
             }
             .buttonStyle(.bordered)
+
+            Button {
+                showingConversation = true
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "bubble.left.and.bubble.right.fill")
+                    Text("会話練習")
+                        .fontWeight(.semibold)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 13)
+            }
+            .buttonStyle(.bordered)
+            .tint(.green)
         }
     }
 
