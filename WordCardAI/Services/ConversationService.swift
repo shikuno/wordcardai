@@ -1,5 +1,5 @@
 // ConversationService.swift
-// Apple Intelligence (FoundationModels) を使ってカードのフレーズを含む会話を生成する
+// 1カード → 1ターン の会話を個別生成する（JSON配列なし・シンプル設計）
 
 import Foundation
 #if canImport(FoundationModels)
@@ -14,72 +14,53 @@ final class ConversationService {
 
     // MARK: - Public
 
-    /// カード群から会話セッションを生成する
-    /// - Parameters:
-    ///   - cards: 使用するカード（日本語 + 英語フレーズ）
-    ///   - turnCount: 生成するターン数（最大 cards.count に制限）
+    /// カード群から会話セッションを生成する（1カード = 1ターン を順番に生成）
     func generateSession(cards: [WordCard], turnCount: Int) async throws -> ConversationSession {
-        guard !cards.isEmpty else {
-            throw ConversationError.noCards
+        guard !cards.isEmpty else { throw ConversationError.noCards }
+
+        let selected = Array(cards.shuffled().prefix(min(turnCount, cards.count)))
+        var turns: [ConversationTurn] = []
+
+        for card in selected {
+            let turn = try await generateOneTurn(card: card)
+            turns.append(turn)
         }
-
-        // 使うカードをランダムで選ぶ（turnCountかcards.count の小さい方）
-        let actualCount = min(turnCount, cards.count)
-        let selectedCards = Array(cards.shuffled().prefix(actualCount))
-
-        let turns = try await generateTurns(from: selectedCards)
         return ConversationSession(collectionTitle: "", turns: turns)
     }
 
-    // MARK: - Private
+    // MARK: - Private: 1カード → 1ターン
 
-    private func generateTurns(from cards: [WordCard]) async throws -> [ConversationTurn] {
-        // カード情報をプロンプト用にまとめる
-        let cardList = cards.enumerated().map { i, c in
-            "\(i + 1). Japanese: \(c.japanese) / English: \(c.english)"
-        }.joined(separator: "\n")
-
+    private func generateOneTurn(card: WordCard) async throws -> ConversationTurn {
         let prompt = """
-        You are an English conversation script writer.
-        Create a natural English conversation where each of the following Japanese/English phrases is used EXACTLY ONCE as a response by Speaker B.
+        Create a short, natural English conversation exchange.
+        Speaker B must say EXACTLY this phrase: "\(card.english)"
+        That phrase comes from this Japanese sentence: "\(card.japanese)"
 
-        Phrases to use:
-        \(cardList)
+        Output 4 lines in this exact format (no labels, no JSON, no extra text):
+        LINE1: Speaker A's English sentence (leads B to naturally say the phrase)
+        LINE2: Japanese translation of Speaker A's line
+        LINE3: Japanese translation of Speaker B's reply (= "\(card.japanese)")
+        LINE4: Speaker B's English reply (= "\(card.english)" used naturally)
 
-        Rules:
-        - For each phrase, write ONE conversation exchange (one turn).
-        - Each turn must have:
-          A) Speaker A's line in English (a natural question or statement that leads B to use the phrase)
-          B) Speaker A's line in Japanese (translation of A's line)
-          C) Speaker B's hint in Japanese (Japanese translation of the phrase — exactly the "Japanese" field above)
-          D) Speaker B's answer in English (exactly the "English" field above, used naturally)
-        - Output ONLY valid JSON. No explanation, no markdown, no code block.
-        - Output format:
-        [
-          {
-            "partnerEnglish": "...",
-            "partnerJapanese": "...",
-            "myHintJapanese": "...",
-            "myEnglish": "...",
-            "cardIndex": 0
-          }
-        ]
-        - cardIndex is 0-based index into the phrases list above.
-        - Keep A's lines short (1-2 sentences). Keep it realistic daily conversation.
+        Example output:
+        How are you feeling today?
+        今日の調子はどう？
+        まあまあかな。
+        Not bad, I guess.
+
+        Now output 4 lines only:
         """
 
         let raw = try await callFoundationModels(prompt: prompt)
-        return try parseJSON(raw: raw, cards: cards)
+        return try parseLines(raw: raw, card: card)
     }
 
     private func callFoundationModels(prompt: String) async throws -> String {
         #if canImport(FoundationModels)
         if #available(iOS 18.2, *) {
-            let instructions = """
-            You are a helpful English conversation script writer.
-            Always respond with valid JSON only. No markdown, no code blocks, no explanation.
-            """
-            let session = LanguageModelSession(instructions: instructions)
+            let session = LanguageModelSession(
+                instructions: "You are an English conversation writer. Output plain text only. No JSON, no markdown, no labels."
+            )
             let response = try await session.respond(to: prompt)
             let raw = (response as? CustomStringConvertible)?.description ?? String(describing: response)
 
@@ -88,50 +69,34 @@ final class ConversationService {
                 let segment = String(raw[range])
                 let prefix = "rawContent: \""
                 if segment.hasPrefix(prefix) && segment.hasSuffix("\"") {
-                    let s = segment.dropFirst(prefix.count).dropLast()
-                    return String(s).replacingOccurrences(of: "\\n", with: "\n")
+                    return String(segment.dropFirst(prefix.count).dropLast())
+                        .replacingOccurrences(of: "\\n", with: "\n")
                 }
             }
-            // rawContentが見つからなければそのまま返す
             return raw.replacingOccurrences(of: "\\n", with: "\n")
         }
         #endif
         throw ConversationError.notAvailable
     }
 
-    private func parseJSON(raw: String, cards: [WordCard]) throws -> [ConversationTurn] {
-        // JSON部分だけ抽出（[ から ] まで）
-        guard let start = raw.firstIndex(of: "["),
-              let end = raw.lastIndex(of: "]") else {
-            throw ConversationError.parseError("JSON配列が見つかりません: \(raw.prefix(200))")
-        }
-        let jsonStr = String(raw[start...end])
-        guard let data = jsonStr.data(using: .utf8) else {
-            throw ConversationError.parseError("UTF8変換失敗")
+    /// 4行テキストをパースして ConversationTurn を作る
+    private func parseLines(raw: String, card: WordCard) throws -> ConversationTurn {
+        let lines = raw
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        guard lines.count >= 4 else {
+            throw ConversationError.parseError("4行取れませんでした(\(lines.count)行): \(raw.prefix(200))")
         }
 
-        struct RawTurn: Codable {
-            let partnerEnglish: String
-            let partnerJapanese: String
-            let myHintJapanese: String
-            let myEnglish: String
-            let cardIndex: Int
-        }
-
-        let rawTurns = try JSONDecoder().decode([RawTurn].self, from: data)
-
-        return rawTurns.map { rt in
-            let cardID = (rt.cardIndex >= 0 && rt.cardIndex < cards.count)
-                ? cards[rt.cardIndex].id
-                : cards[0].id
-            return ConversationTurn(
-                partnerEnglish: rt.partnerEnglish,
-                partnerJapanese: rt.partnerJapanese,
-                myHintJapanese: rt.myHintJapanese,
-                myEnglish: rt.myEnglish,
-                usedCardIDs: [cardID]
-            )
-        }
+        return ConversationTurn(
+            partnerEnglish: lines[0],
+            partnerJapanese: lines[1],
+            myHintJapanese: lines[2],
+            myEnglish: lines[3],
+            usedCardIDs: [card.id]
+        )
     }
 }
 

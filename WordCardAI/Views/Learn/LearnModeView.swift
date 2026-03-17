@@ -91,6 +91,7 @@ struct LearnModeView: View {
                         .foregroundColor(.secondary)
                 }
 
+                // 問題数
                 VStack(alignment: .leading, spacing: 12) {
                     Text("問題数")
                         .font(.headline)
@@ -102,6 +103,69 @@ struct LearnModeView: View {
                     .pickerStyle(.segmented)
                 }
 
+                // 順番
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("順番")
+                        .font(.headline)
+                    HStack(spacing: 8) {
+                        ForEach(LearnCardOrder.allCases) { ord in
+                            let selected = viewModel.order == ord
+                            Button {
+                                viewModel.order = ord
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: ord.icon)
+                                    Text(ord.title)
+                                        .font(.subheadline.weight(.medium))
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 10)
+                                .background(selected ? Color.blue : Color.systemSecondaryBackgroundCompat)
+                                .foregroundColor(selected ? .white : .primary)
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+
+                // 開始位置（忘却曲線モード以外で表示）
+                if viewModel.mode != .spacedRepetition {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("開始位置")
+                            .font(.headline)
+                        ForEach(LearnStartPosition.allCases) { pos in
+                            let selected = viewModel.startFrom == pos
+                            Button {
+                                viewModel.startFrom = pos
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: pos.icon)
+                                        .frame(width: 24)
+                                        .foregroundColor(selected ? .blue : .secondary)
+                                    Text(pos.title)
+                                        .font(.subheadline)
+                                        .foregroundColor(.primary)
+                                    Spacer()
+                                    if selected {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .foregroundColor(.blue)
+                                    }
+                                }
+                                .padding()
+                                .background(Color.systemSecondaryBackgroundCompat)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(selected ? Color.blue.opacity(0.5) : Color.clear, lineWidth: 1.5)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+
+                // 学習モード
                 VStack(alignment: .leading, spacing: 12) {
                     Text("学習モード")
                         .font(.headline)

@@ -316,7 +316,7 @@ struct CollectionCardView: View {
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "graduationcap.fill")
-                    Text("テスト")
+                    Text("学習")
                         .fontWeight(.semibold)
                 }
                 .frame(maxWidth: .infinity)

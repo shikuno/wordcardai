@@ -16,6 +16,8 @@ class LearnModeViewModel: ObservableObject {
     @Published var isShowingAnswer: Bool = false
     @Published var questionCount: Int = 10
     @Published var mode: LearnSessionMode = .normal
+    @Published var order: LearnCardOrder = .random
+    @Published var startFrom: LearnStartPosition = .beginning
     @Published var isConfigured: Bool = false
     @Published var sessionCompleted = false
 
@@ -61,15 +63,38 @@ class LearnModeViewModel: ObservableObject {
     }
 
     func startSession(with sourceCards: [WordCard]) {
-        let selectedCards: [WordCard]
-        switch mode {
-        case .normal:
-            selectedCards = Array(sourceCards.shuffled().prefix(questionCount))
-        case .spacedRepetition:
-            selectedCards = selectSpacedRepetitionCards(from: sourceCards)
+        var pool: [WordCard]
+
+        // --- 順番 ---
+        switch order {
+        case .random:
+            pool = sourceCards.shuffled()
+        case .topToBottom:
+            pool = sourceCards
+        case .bottomToTop:
+            pool = sourceCards.reversed()
         }
 
-        cards = selectedCards
+        // --- 学習モード（spacedRepetitionは独自ソート優先） ---
+        if mode == .spacedRepetition {
+            pool = selectSpacedRepetitionCards(from: pool)
+        } else {
+            // --- 開始位置（通常モード） ---
+            switch startFrom {
+            case .beginning:
+                break
+            case .middle:
+                let mid = pool.count / 2
+                pool = Array(pool[mid...] + pool[..<mid])
+            case .notMastered:
+                let notMastered = pool.filter { $0.learningStatus != .mastered }
+                let mastered = pool.filter { $0.learningStatus == .mastered }
+                pool = notMastered + mastered
+            }
+            pool = Array(pool.prefix(questionCount))
+        }
+
+        cards = pool
         currentIndex = 0
         isShowingAnswer = false
         sessionCompleted = false
@@ -189,19 +214,63 @@ enum LearnSessionMode: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .normal:
-            return "通常"
-        case .spacedRepetition:
-            return "忘却曲線"
+        case .normal: return "通常"
+        case .spacedRepetition: return "忘却曲線"
         }
     }
 
     var description: String {
         switch self {
-        case .normal:
-            return "ランダムに出題"
-        case .spacedRepetition:
-            return "復習期限が来たカードを優先"
+        case .normal: return "設定した順番で出題"
+        case .spacedRepetition: return "復習期限が来たカードを優先"
+        }
+    }
+}
+
+enum LearnCardOrder: String, CaseIterable, Identifiable {
+    case random
+    case topToBottom
+    case bottomToTop
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .random: return "ランダム"
+        case .topToBottom: return "上から順番"
+        case .bottomToTop: return "下から順番"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .random: return "shuffle"
+        case .topToBottom: return "arrow.down"
+        case .bottomToTop: return "arrow.up"
+        }
+    }
+}
+
+enum LearnStartPosition: String, CaseIterable, Identifiable {
+    case beginning
+    case middle
+    case notMastered
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .beginning: return "最初から"
+        case .middle: return "途中から（中間）"
+        case .notMastered: return "未習得を優先"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .beginning: return "1.circle"
+        case .middle: return "arrow.right.to.line"
+        case .notMastered: return "exclamationmark.circle"
         }
     }
 }
