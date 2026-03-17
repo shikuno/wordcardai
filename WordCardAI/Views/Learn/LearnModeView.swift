@@ -36,6 +36,7 @@ enum LearnStep {
 struct LearnModeView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var viewModel = LearnModeViewModel()
+    @StateObject private var convVM = ConversationViewModel()
     private let speechService = SpeechService.shared
 
     let cards: [WordCard]
@@ -63,12 +64,11 @@ struct LearnModeView: View {
                     case .flashcard:
                         flashcardSessionView
                     case .conversation:
-                        // ConversationViewをsheet内に出す
-                        conversationPlaceholder
+                        conversationSessionView
                     }
                 }
             }
-            .padding()
+            .padding(step == .conversation ? 0 : 16)
             .navigationTitle(navTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -76,9 +76,9 @@ struct LearnModeView: View {
                     Button {
                         if step == .modeSelect {
                             speechService.stop()
+                            convVM.stop()
                             dismiss()
                         } else {
-                            // 前のステップへ戻る
                             withAnimation { goBack() }
                         }
                     } label: {
@@ -94,16 +94,10 @@ struct LearnModeView: View {
                 }
             }
             .onAppear { viewModel.prepare(with: cards) }
-            .onDisappear { speechService.stop() }
-        }
-        .sheet(isPresented: Binding(
-            get: { step == .conversation },
-            set: { if !$0 { step = .settings } }
-        )) {
-        ConversationView(
-                cards: viewModel.selectedCards.isEmpty ? cards : viewModel.selectedCards,
-                collectionTitle: ""
-            )
+            .onDisappear {
+                speechService.stop()
+                convVM.stop()
+            }
         }
     }
 
@@ -251,8 +245,16 @@ struct LearnModeView: View {
             // スタートボタン
             Button {
                 viewModel.startSession(with: cards)
-                withAnimation {
-                    step = selectedMode == .flashcard ? .flashcard : .conversation
+                if selectedMode == .flashcard {
+                    withAnimation { step = .flashcard }
+                } else {
+                    withAnimation { step = .conversation }
+                    Task {
+                        await convVM.start(
+                            cards: viewModel.selectedCards.isEmpty ? cards : viewModel.selectedCards,
+                            turnCount: viewModel.questionCount
+                        )
+                    }
                 }
             } label: {
                 Text("\(viewModel.questionCount)問スタート")
@@ -281,6 +283,210 @@ struct LearnModeView: View {
     // 会話練習はsheetで出すのでプレースホルダー
     private var conversationPlaceholder: some View {
         Color.clear.onAppear { step = .conversation }
+    }
+
+    // MARK: - ③ 会話練習本番（インライン）
+
+    private var conversationSessionView: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(spacing: 16) {
+                switch convVM.phase {
+                case .loading:
+                    convLoadingView
+
+                case .error(let msg):
+                    convErrorView(msg)
+
+                case .finished:
+                    convFinishedView
+
+                default:
+                    if let turn = convVM.currentTurn {
+                        // 進捗
+                        VStack(spacing: 6) {
+                            Text("ターン \(convVM.progress)")
+                                .font(.caption.weight(.semibold))
+                                .foregroundColor(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .trailing)
+                            ProgressView(value: Double(convVM.currentTurnIndex + 1),
+                                         total: Double(convVM.session?.turns.count ?? 1))
+                                .tint(.green)
+                        }
+                        .padding(.horizontal)
+
+                        // 相手のセリフ
+                        convPartnerCard(turn: turn)
+
+                        // 自分の返答エリア
+                        convMyCard(turn: turn)
+
+                        // 次へボタン
+                        if case .nextReady = convVM.phase {
+                            Button {
+                                convVM.goNext()
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Text(convVM.isLastTurn ? "完了" : "次のターンへ")
+                                        .fontWeight(.semibold)
+                                    Image(systemName: convVM.isLastTurn ? "checkmark.circle.fill" : "arrow.right.circle.fill")
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 14)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(.green)
+                            .padding(.horizontal)
+                        }
+                    }
+                }
+            }
+            .padding(.vertical, 12)
+        }
+    }
+
+    private var convLoadingView: some View {
+        VStack(spacing: 16) {
+            ProgressView().scaleEffect(1.3)
+            Text("AIが会話を生成中…")
+                .font(.headline).foregroundColor(.secondary)
+        }
+        .frame(maxWidth: .infinity).padding(.vertical, 60)
+    }
+
+    private func convErrorView(_ msg: String) -> some View {
+        VStack(spacing: 16) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 44)).foregroundColor(.orange)
+            Text("会話を生成できませんでした").font(.headline)
+            Text(msg).font(.caption).foregroundColor(.secondary)
+                .multilineTextAlignment(.center).padding(.horizontal, 32)
+            Button("もう一度試す") {
+                Task {
+                    await convVM.start(
+                        cards: viewModel.selectedCards.isEmpty ? cards : viewModel.selectedCards,
+                        turnCount: viewModel.questionCount
+                    )
+                }
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .padding()
+    }
+
+    private var convFinishedView: some View {
+        VStack(spacing: 24) {
+            Image(systemName: "star.fill")
+                .font(.system(size: 56)).foregroundColor(.yellow)
+            Text("練習完了！").font(.largeTitle.bold())
+            Text("\(convVM.session?.turns.count ?? 0)つのフレーズを使いました")
+                .font(.subheadline).foregroundColor(.secondary)
+            Button("もう一度（別の会話）") {
+                Task {
+                    await convVM.start(
+                        cards: viewModel.selectedCards.isEmpty ? cards : viewModel.selectedCards,
+                        turnCount: viewModel.questionCount
+                    )
+                }
+            }
+            .buttonStyle(.borderedProminent).tint(.green)
+            Button("設定に戻る") { withAnimation { step = .settings } }
+                .buttonStyle(.bordered)
+        }
+        .padding()
+    }
+
+    private func convPartnerCard(turn: ConversationTurn) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("相手のセリフ", systemImage: "person.bubble.fill")
+                .font(.caption.weight(.semibold)).foregroundColor(.secondary)
+            Text(turn.partnerEnglish)
+                .font(.title3.weight(.medium)).fixedSize(horizontal: false, vertical: true)
+            Text(turn.partnerJapanese)
+                .font(.subheadline).foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button { convVM.speakPartner() } label: {
+                Label("もう一度聞く", systemImage: "speaker.wave.2.fill")
+                    .font(.caption.weight(.semibold))
+            }
+            .buttonStyle(.bordered).tint(.blue)
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(uiColor: .secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .padding(.horizontal)
+    }
+
+    private func convMyCard(turn: ConversationTurn) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("あなたの返答", systemImage: "person.fill")
+                .font(.caption.weight(.semibold)).foregroundColor(.secondary)
+
+            switch convVM.phase {
+            case .partnerSpeaking:
+                Button { convVM.showHintAndCountdown() } label: {
+                    Text("ヒントを見てシンキングタイムへ")
+                        .frame(maxWidth: .infinity).padding(.vertical, 4)
+                }
+                .buttonStyle(.borderedProminent).tint(.green)
+
+            case .showHint, .thinkingCountdown:
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(turn.myHintJapanese)
+                        .font(.title3.weight(.semibold))
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack {
+                        Text("英語で言ってみよう").font(.subheadline).foregroundColor(.secondary)
+                        Spacer()
+                        // カウントダウン円
+                        ZStack {
+                            Circle().stroke(Color.green.opacity(0.2), lineWidth: 3).frame(width: 40, height: 40)
+                            Circle()
+                                .trim(from: 0, to: CGFloat(convVM.countdown) / CGFloat(max(convVM.thinkingSeconds, 1)))
+                                .stroke(Color.green, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                                .frame(width: 40, height: 40)
+                                .rotationEffect(.degrees(-90))
+                                .animation(.linear(duration: 1), value: convVM.countdown)
+                            Text("\(convVM.countdown)").font(.subheadline.monospacedDigit().weight(.semibold))
+                        }
+                    }
+                    Button { convVM.revealAnswer() } label: {
+                        Text("答えを見る").frame(maxWidth: .infinity).padding(.vertical, 4)
+                    }
+                    .buttonStyle(.bordered)
+                }
+
+            case .showAnswer, .nextReady:
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(turn.myHintJapanese)
+                        .font(.subheadline).foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Divider()
+                    Text(turn.myEnglish)
+                        .font(.title3.weight(.bold)).foregroundColor(.blue)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if case .nextReady = convVM.phase {
+                        Button { convVM.speakAnswer() } label: {
+                            Label("もう一度聞く", systemImage: "speaker.wave.2.fill")
+                                .font(.caption.weight(.semibold))
+                        }
+                        .buttonStyle(.bordered).tint(.blue)
+                    } else {
+                        HStack(spacing: 6) {
+                            ProgressView().scaleEffect(0.7)
+                            Text("読み上げ中…").font(.caption).foregroundColor(.secondary)
+                        }
+                    }
+                }
+
+            default: EmptyView()
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(uiColor: .secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .padding(.horizontal)
     }
 
     // MARK: - フラッシュカード内部UI（既存流用）
