@@ -188,53 +188,59 @@ struct CollectionCardView: View {
     }
 
     // MARK: - Card Carousel
-    // Instagram/メルカリ型: カードは画面幅の80%、左右に8pxの隙間+前後カードが細く見える
+    // HStack全カード横並び + currentIndex変化でスライドアニメーション
 
     private var cardCarouselSection: some View {
         GeometryReader { geometry in
-            let gap: CGFloat = 10          // 現在カードと前後カードの間の隙間
-            let peekWidth: CGFloat = 14    // 前後カードのチラ見え幅
+            let gap: CGFloat = 12
+            let peekWidth: CGFloat = 16
             let cardWidth = geometry.size.width - (peekWidth + gap) * 2
 
-            ZStack(alignment: .center) {
-                // 前カード（左・細く見える）
-                if playbackViewModel.canGoPrevious {
-                    RoundedRectangle(cornerRadius: 18)
-                        .fill(Color(uiColor: .tertiarySystemBackground))
-                        .shadow(color: .black.opacity(0.04), radius: 4, y: 2)
-                        .frame(width: cardWidth, height: 290)
-                        .offset(x: -(cardWidth + gap * 2))
-                }
+            // 全カードを横に並べ、currentIndex分だけオフセット
+            let stride = cardWidth + gap
+            let baseOffset = (geometry.size.width - cardWidth) / 2
+            let scrollOffset = baseOffset - CGFloat(playbackViewModel.currentIndex) * stride
 
-                // 次カード（右・細く見える）
-                if playbackViewModel.canGoNext {
-                    RoundedRectangle(cornerRadius: 18)
-                        .fill(Color(uiColor: .tertiarySystemBackground))
-                        .shadow(color: .black.opacity(0.04), radius: 4, y: 2)
-                        .frame(width: cardWidth, height: 290)
-                        .offset(x: cardWidth + gap * 2)
+            HStack(spacing: gap) {
+                ForEach(Array(playbackViewModel.cards.enumerated()), id: \.offset) { idx, card in
+                    cardCell(card: card, idx: idx, cardWidth: cardWidth, isCurrent: idx == playbackViewModel.currentIndex)
                 }
-
-                // 現在カード（中央・前面）
-                mainCardView(cardWidth: cardWidth)
             }
-            .frame(width: geometry.size.width, height: 310)
+            .offset(x: scrollOffset + dragOffset)
+            .animation(.spring(response: 0.35, dampingFraction: 0.82), value: playbackViewModel.currentIndex)
+            .animation(.interactiveSpring(response: 0.2, dampingFraction: 0.9), value: dragOffset)
+            .frame(height: 310)
+            .gesture(
+                DragGesture(minimumDistance: 20)
+                    .updating($dragOffset) { value, state, _ in
+                        // 端のカードでは引っ張り抵抗をかける
+                        let raw = value.translation.width
+                        if (raw > 0 && !playbackViewModel.canGoPrevious) ||
+                           (raw < 0 && !playbackViewModel.canGoNext) {
+                            state = raw * 0.25
+                        } else {
+                            state = raw
+                        }
+                    }
+                    .onEnded { value in
+                        playbackViewModel.handleSwipe(translation: value.translation.width)
+                    }
+            )
         }
         .frame(height: 310)
     }
 
-    // MARK: - Main Card
-
-    private func mainCardView(cardWidth: CGFloat) -> some View {
+    // 1枚のカードセル
+    private func cardCell(card: WordCard, idx: Int, cardWidth: CGFloat, isCurrent: Bool) -> some View {
         ZStack {
             RoundedRectangle(cornerRadius: 18)
-                .fill(Color(uiColor: .secondarySystemBackground))
-                .shadow(color: .black.opacity(0.10), radius: 10, y: 4)
+                .fill(Color(uiColor: isCurrent ? .secondarySystemBackground : .tertiarySystemBackground))
+                .shadow(color: .black.opacity(isCurrent ? 0.10 : 0.04), radius: isCurrent ? 10 : 4, y: 4)
 
-            VStack(spacing: 16) {
-                Spacer()
+            if isCurrent {
+                VStack(spacing: 16) {
+                    Spacer()
 
-                if let card = playbackViewModel.currentCard {
                     Text(card.japanese)
                         .font(.title.bold())
                         .multilineTextAlignment(.center)
@@ -249,41 +255,32 @@ struct CollectionCardView: View {
                             .padding(.horizontal, 24)
                             .transition(.opacity.combined(with: .move(edge: .bottom)))
                     }
+
+                    Spacer()
+
+                    if showFlipHint {
+                        Text("タップで裏返す")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .padding(.bottom, 12)
+                            .transition(.opacity)
+                    }
                 }
-
-                Spacer()
-
-                if showFlipHint {
-                    Text("タップで裏返す")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .padding(.bottom, 12)
-                        .transition(.opacity)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    withAnimation(.easeInOut(duration: 0.22)) {
+                        playbackViewModel.toggleSide()
+                        if showFlipHint {
+                            showFlipHint = false
+                            settingsService.updateHasSeenCardFlipHint(true)
+                        }
+                    }
                 }
             }
         }
         .frame(width: cardWidth, height: 290)
-        .offset(x: dragOffset)
-        .animation(.spring(response: 0.3, dampingFraction: 0.85), value: dragOffset)
-        .contentShape(Rectangle())
-        .onTapGesture {
-            withAnimation(.easeInOut(duration: 0.25)) {
-                playbackViewModel.toggleSide()
-                if showFlipHint {
-                    showFlipHint = false
-                    settingsService.updateHasSeenCardFlipHint(true)
-                }
-            }
-        }
-        .gesture(
-            DragGesture(minimumDistance: 20)
-                .updating($dragOffset) { value, state, _ in
-                    state = value.translation.width
-                }
-                .onEnded { value in
-                    playbackViewModel.handleSwipe(translation: value.translation.width)
-                }
-        )
+        .scaleEffect(isCurrent ? 1.0 : 0.95)
+        .animation(.spring(response: 0.35, dampingFraction: 0.82), value: isCurrent)
     }
 
     // MARK: - Playback Controls（再生・学習モードを横並び）
@@ -312,7 +309,7 @@ struct CollectionCardView: View {
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "graduationcap.fill")
-                    Text("学習")
+                    Text("テスト")
                         .fontWeight(.semibold)
                 }
                 .frame(maxWidth: .infinity)
@@ -398,7 +395,7 @@ struct CollectionCardView: View {
 
                 // 裏→次カードの間隔
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("裏→次のカード")
+                    Text("読み上げ後の間隔")
                         .font(.caption)
                         .foregroundColor(.secondary)
                     Menu {
