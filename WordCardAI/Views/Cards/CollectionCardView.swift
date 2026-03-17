@@ -20,7 +20,6 @@ struct CollectionCardView: View {
     @GestureState private var dragOffset: CGFloat = 0
     @State private var showFlipHint = false
     @State private var editingCard: WordCard?
-    @State private var showingSpeedPicker = false
 
     init(collection: CardCollection, cardsViewModel: CardsViewModel, collectionsViewModel: CollectionsViewModel) {
         self.collection = collection
@@ -46,7 +45,7 @@ struct CollectionCardView: View {
                     // カードエリア（前後チラ見え）
                     cardCarouselSection
 
-                    // 再生ボタン（カードのすぐ下）
+                    // 再生ボタン + 学習モードボタン（横並び）
                     playbackControlRow
                         .padding(.horizontal)
                         .padding(.top, 16)
@@ -55,18 +54,7 @@ struct CollectionCardView: View {
                     playbackSettingsSection
                         .padding(.horizontal)
                         .padding(.top, 16)
-
-                    // 学習モード
-                    Button {
-                        showingLearnMode = true
-                    } label: {
-                        Label("学習モード", systemImage: "graduationcap.fill")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .padding(.horizontal)
-                    .padding(.top, 12)
-                    .padding(.bottom, 32)
+                        .padding(.bottom, 32)
                 }
             }
         }
@@ -138,48 +126,6 @@ struct CollectionCardView: View {
                 card: card
             )
         }
-        .sheet(isPresented: $showingSpeedPicker) {
-            NavigationStack {
-                List {
-                    Section("再生スピード") {
-                        ForEach(playbackViewModel.playbackPresets, id: \.self) { preset in
-                            Button {
-                                playbackViewModel.playbackRate = preset
-                                showingSpeedPicker = false
-                            } label: {
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(String(format: "%.2gx", preset))
-                                            .foregroundColor(.primary)
-                                        Text(speedDescription(for: preset))
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                    }
-                                    Spacer()
-                                    if abs(playbackViewModel.playbackRate - preset) < 0.01 {
-                                        Image(systemName: "checkmark.circle.fill")
-                                            .foregroundColor(.blue)
-                                    }
-                                }
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-                .navigationTitle("再生スピード")
-                #if os(iOS)
-                .navigationBarTitleDisplayMode(.inline)
-                #endif
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("閉じる") {
-                            showingSpeedPicker = false
-                        }
-                    }
-                }
-            }
-            .presentationDetents([.medium])
-        }
     }
 
     // MARK: - Header
@@ -205,66 +151,58 @@ struct CollectionCardView: View {
     }
 
     // MARK: - Card Carousel
+    // Instagram/メルカリ型: カードは画面幅の80%、左右に8pxの隙間+前後カードが細く見える
 
     private var cardCarouselSection: some View {
         GeometryReader { geometry in
-            // 中央カードは画面幅の 84%、左右に各 ~8% ずつはみ出させる
-            let cardWidth = geometry.size.width * 0.84
-            let sideOffset = (geometry.size.width - cardWidth) / 2
+            let gap: CGFloat = 10          // 現在カードと前後カードの間の隙間
+            let peekWidth: CGFloat = 14    // 前後カードのチラ見え幅
+            let cardWidth = geometry.size.width - (peekWidth + gap) * 2
 
             ZStack(alignment: .center) {
-                // 前カード（背面・左）
+                // 前カード（左・細く見える）
                 if playbackViewModel.canGoPrevious {
-                    peekCard
-                        .frame(width: cardWidth, height: 300)
-                        .offset(x: -(cardWidth * 0.5 + sideOffset * 0.6))
+                    RoundedRectangle(cornerRadius: 18)
+                        .fill(Color(uiColor: .tertiarySystemBackground))
+                        .shadow(color: .black.opacity(0.04), radius: 4, y: 2)
+                        .frame(width: cardWidth, height: 290)
+                        .offset(x: -(cardWidth + gap * 2))
                 }
 
-                // 次カード（背面・右）
+                // 次カード（右・細く見える）
                 if playbackViewModel.canGoNext {
-                    peekCard
-                        .frame(width: cardWidth, height: 300)
-                        .offset(x: cardWidth * 0.5 + sideOffset * 0.6)
+                    RoundedRectangle(cornerRadius: 18)
+                        .fill(Color(uiColor: .tertiarySystemBackground))
+                        .shadow(color: .black.opacity(0.04), radius: 4, y: 2)
+                        .frame(width: cardWidth, height: 290)
+                        .offset(x: cardWidth + gap * 2)
                 }
 
-                // 現在カード（前面）
+                // 現在カード（中央・前面）
                 mainCardView(cardWidth: cardWidth)
             }
-            .frame(width: geometry.size.width, height: 320)
+            .frame(width: geometry.size.width, height: 310)
         }
-        .frame(height: 320)
-        // 左右クリッピングをオフにして前後カードがはみ出して見えるようにする
-        .clipped(antialiased: false)
-    }
-
-    /// 前後にチラ見えさせるダミーカード（中身なし・角丸のみ）
-    private var peekCard: some View {
-        RoundedRectangle(cornerRadius: 20)
-            .fill(Color(uiColor: .secondarySystemBackground))
-            .shadow(color: .black.opacity(0.05), radius: 4, y: 2)
+        .frame(height: 310)
     }
 
     // MARK: - Main Card
 
     private func mainCardView(cardWidth: CGFloat) -> some View {
         ZStack {
-            // カード背景
-            RoundedRectangle(cornerRadius: 20)
+            RoundedRectangle(cornerRadius: 18)
                 .fill(Color(uiColor: .secondarySystemBackground))
                 .shadow(color: .black.opacity(0.10), radius: 10, y: 4)
 
-            // カード内コンテンツ
             VStack(spacing: 16) {
                 Spacer()
 
                 if let card = playbackViewModel.currentCard {
-                    // 表面（日本語）
                     Text(card.japanese)
                         .font(.title.bold())
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 24)
 
-                    // 裏面（英語）
                     if playbackViewModel.isShowingBack {
                         Divider().padding(.horizontal, 40)
                         Text(card.english)
@@ -278,7 +216,6 @@ struct CollectionCardView: View {
 
                 Spacer()
 
-                // タップヒント（初回のみ）
                 if showFlipHint {
                     Text("タップで裏返す")
                         .font(.caption)
@@ -288,7 +225,7 @@ struct CollectionCardView: View {
                 }
             }
         }
-        .frame(width: cardWidth, height: 300)
+        .frame(width: cardWidth, height: 290)
         .offset(x: dragOffset)
         .animation(.spring(response: 0.3, dampingFraction: 0.85), value: dragOffset)
         .contentShape(Rectangle())
@@ -312,11 +249,10 @@ struct CollectionCardView: View {
         )
     }
 
-    // MARK: - Playback Controls
+    // MARK: - Playback Controls（再生・学習モードを横並び）
 
-    /// 再生ボタン（カードの外・直下）
     private var playbackControlRow: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             Button {
                 if playbackViewModel.isPlaying {
                     playbackViewModel.stopPlayback()
@@ -324,15 +260,28 @@ struct CollectionCardView: View {
                     playbackViewModel.startPlayback()
                 }
             } label: {
-                HStack(spacing: 8) {
+                HStack(spacing: 6) {
                     Image(systemName: playbackViewModel.isPlaying ? "stop.fill" : "play.fill")
                     Text(playbackViewModel.isPlaying ? "停止" : "再生")
                         .fontWeight(.semibold)
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
+                .padding(.vertical, 13)
             }
             .buttonStyle(.borderedProminent)
+
+            Button {
+                showingLearnMode = true
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "graduationcap.fill")
+                    Text("学習")
+                        .fontWeight(.semibold)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 13)
+            }
+            .buttonStyle(.bordered)
         }
     }
 
@@ -351,56 +300,65 @@ struct CollectionCardView: View {
             }
             .pickerStyle(.segmented)
 
-            // 再生スピード（タップでシート）
-            Button {
-                showingSpeedPicker = true
-            } label: {
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("再生スピード")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                        Text(playbackViewModel.playbackSpeedText)
-                            .font(.headline)
-                            .foregroundColor(.primary)
-                    }
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                .padding()
-                .background(Color(uiColor: .tertiarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-            }
-            .buttonStyle(.plain)
+            // 再生スピード（ボタン選択）
+            VStack(alignment: .leading, spacing: 8) {
+                Text("再生スピード")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
 
-            // 次カードまでの待ち時間
-            VStack(alignment: .leading, spacing: 6) {
+                let presets: [Double] = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
+                HStack(spacing: 6) {
+                    ForEach(presets, id: \.self) { rate in
+                        let isSelected = abs(playbackViewModel.playbackRate - rate) < 0.01
+                        Button {
+                            playbackViewModel.playbackRate = rate
+                        } label: {
+                            Text(String(format: "%.2gx", rate))
+                                .font(.caption.weight(.semibold))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 8)
+                                .background(isSelected ? Color.blue : Color(uiColor: .tertiarySystemBackground))
+                                .foregroundColor(isSelected ? .white : .primary)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+
+            // 自動送り待ち時間（カスタム刻み）
+            VStack(alignment: .leading, spacing: 8) {
                 Text("自動送り: \(playbackViewModel.autoAdvanceDelayText)")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
-                Slider(value: $playbackViewModel.autoAdvanceDelay, in: 0...10, step: 0.5)
+
+                // 0〜3秒は0.5刻み、3〜6秒は1秒刻み、6〜10秒は2秒刻み
+                let delaySteps: [Double] = [0, 0.5, 1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(delaySteps, id: \.self) { sec in
+                            let isSelected = abs(playbackViewModel.autoAdvanceDelay - sec) < 0.01
+                            Button {
+                                playbackViewModel.autoAdvanceDelay = sec
+                            } label: {
+                                Text(sec == 0 ? "なし" : "\(sec.formatted())秒")
+                                    .font(.caption.weight(.semibold))
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 7)
+                                    .background(isSelected ? Color.blue : Color(uiColor: .tertiarySystemBackground))
+                                    .foregroundColor(isSelected ? .white : .primary)
+                                    .clipShape(Capsule())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
             }
         }
         .padding()
         .background(Color(uiColor: .secondarySystemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 16))
-    }
-
-    private func speedDescription(for rate: Double) -> String {
-        switch rate {
-        case ..<0.4:
-            return "かなりゆっくり"
-        case ..<0.75:
-            return "ゆっくり"
-        case ..<1.25:
-            return "標準"
-        case ..<1.75:
-            return "速い"
-        default:
-            return "かなり速い"
-        }
     }
 
     private var emptyStateView: some View {
