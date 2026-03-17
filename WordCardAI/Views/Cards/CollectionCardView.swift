@@ -33,19 +33,42 @@ struct CollectionCardView: View {
 
     var body: some View {
         ScrollView(showsIndicators: false) {
-            VStack(spacing: 18) {
+            VStack(spacing: 0) {
                 if playbackViewModel.cards.isEmpty {
                     emptyStateView
                 } else {
+                    // ヘッダー：コレクション名・枚数・学習状態
                     headerSection
-                    actionShortcutSection
-                    cardSection
+                        .padding(.horizontal)
+                        .padding(.top, 8)
+                        .padding(.bottom, 12)
+
+                    // カードエリア（前後チラ見え）
+                    cardCarouselSection
+
+                    // 再生ボタン（カードのすぐ下）
+                    playbackControlRow
+                        .padding(.horizontal)
+                        .padding(.top, 16)
+
+                    // 再生設定
                     playbackSettingsSection
-                    controlSection
+                        .padding(.horizontal)
+                        .padding(.top, 16)
+
+                    // 学習モード
+                    Button {
+                        showingLearnMode = true
+                    } label: {
+                        Label("学習モード", systemImage: "graduationcap.fill")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .padding(.horizontal)
+                    .padding(.top, 12)
+                    .padding(.bottom, 32)
                 }
             }
-            .padding()
-            .padding(.bottom, 24)
         }
         .navigationTitle(collection.title)
         #if os(iOS)
@@ -159,234 +182,118 @@ struct CollectionCardView: View {
         }
     }
 
-    private var headerSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(collection.title)
-                    .font(.title2.bold())
-                    .lineLimit(2)
-                Spacer(minLength: 16)
-                Text(playbackViewModel.progressText)
-                    .font(.headline.monospacedDigit())
-                    .foregroundColor(.secondary)
-            }
+    // MARK: - Header
 
-            if let card = playbackViewModel.currentCard {
-                HStack(spacing: 8) {
+    private var headerSection: some View {
+        HStack(alignment: .center) {
+            VStack(alignment: .leading, spacing: 4) {
+                if let card = playbackViewModel.currentCard {
                     Text(card.learningStatus.displayName)
                         .font(.caption.weight(.semibold))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
                         .background(Color.blue.opacity(0.1))
                         .foregroundColor(.blue)
-                        .cornerRadius(999)
-                    if let nextReviewAt = card.nextReviewAt {
-                        Text("次回: \(nextReviewAt.formatted(date: .abbreviated, time: .omitted))")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    Spacer()
-                    Text("全 \(playbackViewModel.cards.count) 枚")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                        .clipShape(Capsule())
                 }
-            }
-        }
-    }
-
-    private var actionShortcutSection: some View {
-        HStack(spacing: 10) {
-            smartActionChip(title: "追加", systemImage: "plus.circle") {
-                showingCreateCard = true
-            }
-            smartActionChip(title: "一覧 / 編集", systemImage: "square.and.pencil") {
-                showingList = true
             }
             Spacer()
+            Text(playbackViewModel.progressText)
+                .font(.subheadline.monospacedDigit())
+                .foregroundColor(.secondary)
         }
     }
 
-    private func smartActionChip(title: String, systemImage: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Label(title, systemImage: systemImage)
-                .font(.subheadline.weight(.medium))
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(Color.systemSecondaryBackgroundCompat)
-                .clipShape(Capsule())
-        }
-        .buttonStyle(.plain)
-    }
+    // MARK: - Card Carousel
 
-    private var cardSection: some View {
+    private var cardCarouselSection: some View {
         GeometryReader { geometry in
-            let cardWidth = min(geometry.size.width * 0.88, 430)
-            let peekOffset = cardWidth * 0.54
+            // 中央カードは画面幅の 84%、左右に各 ~8% ずつはみ出させる
+            let cardWidth = geometry.size.width * 0.84
+            let sideOffset = (geometry.size.width - cardWidth) / 2
 
-            ZStack {
+            ZStack(alignment: .center) {
+                // 前カード（背面・左）
                 if playbackViewModel.canGoPrevious {
-                    edgePeekCard(direction: .previous)
-                        .frame(width: cardWidth, height: 340)
-                        .offset(x: -peekOffset)
+                    peekCard
+                        .frame(width: cardWidth, height: 300)
+                        .offset(x: -(cardWidth * 0.5 + sideOffset * 0.6))
                 }
 
-                currentInteractiveCard(width: cardWidth)
-
+                // 次カード（背面・右）
                 if playbackViewModel.canGoNext {
-                    edgePeekCard(direction: .next)
-                        .frame(width: cardWidth, height: 340)
-                        .offset(x: peekOffset)
+                    peekCard
+                        .frame(width: cardWidth, height: 300)
+                        .offset(x: cardWidth * 0.5 + sideOffset * 0.6)
                 }
+
+                // 現在カード（前面）
+                mainCardView(cardWidth: cardWidth)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(width: geometry.size.width, height: 320)
         }
-        .frame(height: 380)
+        .frame(height: 320)
+        // 左右クリッピングをオフにして前後カードがはみ出して見えるようにする
+        .clipped(antialiased: false)
     }
 
-    private func edgePeekCard(direction: SidePreviewDirection) -> some View {
-        RoundedRectangle(cornerRadius: 24)
-            .fill(Color.systemTertiaryBackgroundCompat)
-            .shadow(color: .black.opacity(0.06), radius: 6, y: 2)
-            .mask(alignment: direction == .previous ? .trailing : .leading) {
-                Rectangle()
-                    .frame(width: 18)
-            }
-            .opacity(0.95)
+    /// 前後にチラ見えさせるダミーカード（中身なし・角丸のみ）
+    private var peekCard: some View {
+        RoundedRectangle(cornerRadius: 20)
+            .fill(Color(uiColor: .secondarySystemBackground))
+            .shadow(color: .black.opacity(0.05), radius: 4, y: 2)
     }
 
-    private var playbackSettingsSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("再生モード")
-                .font(.headline)
+    // MARK: - Main Card
 
-            Picker("読み上げ対象", selection: $playbackViewModel.speechTarget) {
-                ForEach(PlaybackSpeechTarget.allCases) { target in
-                    Text(target.title).tag(target)
-                }
-            }
-            .pickerStyle(.segmented)
+    private func mainCardView(cardWidth: CGFloat) -> some View {
+        ZStack {
+            // カード背景
+            RoundedRectangle(cornerRadius: 20)
+                .fill(Color(uiColor: .secondarySystemBackground))
+                .shadow(color: .black.opacity(0.10), radius: 10, y: 4)
 
-            VStack(alignment: .leading, spacing: 10) {
-                Text("再生スピード")
-                    .font(.subheadline)
+            // カード内コンテンツ
+            VStack(spacing: 16) {
+                Spacer()
 
-                Button {
-                    showingSpeedPicker = true
-                } label: {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(playbackViewModel.playbackSpeedText)
-                                .font(.headline)
-                                .foregroundColor(.primary)
-                            Text(playbackViewModel.playbackSpeedLabel)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        Spacer()
-                        Image(systemName: "chevron.up.chevron.down")
-                            .foregroundColor(.secondary)
-                    }
-                    .padding()
-                    .contentShape(Rectangle())
-                    .background(Color.systemTertiaryBackgroundCompat)
-                    .clipShape(RoundedRectangle(cornerRadius: 14))
-                }
-                .buttonStyle(.plain)
-            }
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text("次のカードまでの待ち時間: \(playbackViewModel.autoAdvanceDelayText)")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                Slider(value: $playbackViewModel.autoAdvanceDelay, in: 0...10, step: 0.5)
-            }
-        }
-        .padding()
-        .background(Color.systemSecondaryBackgroundCompat)
-        .cornerRadius(16)
-    }
-
-    private var controlSection: some View {
-        HStack(spacing: 12) {
-            Button {
-                showingLearnMode = true
-            } label: {
-                Label("学習モード", systemImage: "graduationcap.fill")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-        }
-    }
-
-    private func currentInteractiveCard(width: CGFloat) -> some View {
-        let card = playbackViewModel.currentCard
-
-        return ZStack {
-            RoundedRectangle(cornerRadius: 26)
-                .fill(Color.systemSecondaryBackgroundCompat)
-                .shadow(color: .black.opacity(0.12), radius: 14, y: 6)
-
-            if let card {
-                VStack(spacing: 18) {
-                    Spacer(minLength: 12)
-
+                if let card = playbackViewModel.currentCard {
+                    // 表面（日本語）
                     Text(card.japanese)
-                        .font(.title)
-                        .fontWeight(.bold)
+                        .font(.title.bold())
                         .multilineTextAlignment(.center)
-                        .padding(.horizontal)
+                        .padding(.horizontal, 24)
 
-                    Button {
-                        if playbackViewModel.isPlaying {
-                            playbackViewModel.stopPlayback()
-                        } else {
-                            playbackViewModel.startPlayback()
-                        }
-                    } label: {
-                        Label(playbackViewModel.isPlaying ? "停止" : "再生", systemImage: playbackViewModel.isPlaying ? "stop.fill" : "play.fill")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .padding(.horizontal)
-
+                    // 裏面（英語）
                     if playbackViewModel.isShowingBack {
-                        Divider()
-                            .padding(.horizontal, 40)
+                        Divider().padding(.horizontal, 40)
                         Text(card.english)
                             .font(.title2)
                             .foregroundColor(.blue)
                             .multilineTextAlignment(.center)
-                            .padding(.horizontal)
-                            .transition(.opacity.combined(with: .scale))
+                            .padding(.horizontal, 24)
+                            .transition(.opacity.combined(with: .move(edge: .bottom)))
                     }
-
-                    Spacer(minLength: 12)
                 }
-                .padding(.vertical)
-            }
 
-            if showFlipHint {
-                VStack {
-                    Spacer()
-                    Label("タップで表裏切替", systemImage: "hand.tap")
-                        .font(.caption.weight(.semibold))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(.ultraThinMaterial)
-                        .clipShape(Capsule())
-                        .padding(.bottom, 16)
+                Spacer()
+
+                // タップヒント（初回のみ）
+                if showFlipHint {
+                    Text("タップで裏返す")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(.bottom, 12)
+                        .transition(.opacity)
                 }
-                .transition(.opacity)
             }
         }
-        .frame(width: width, height: 350)
+        .frame(width: cardWidth, height: 300)
         .offset(x: dragOffset)
-        .rotationEffect(.degrees(Double(dragOffset / 24)))
-        .scaleEffect(1 - min(abs(dragOffset) / 1200, 0.04))
-        .animation(.spring(response: 0.28, dampingFraction: 0.85), value: dragOffset)
+        .animation(.spring(response: 0.3, dampingFraction: 0.85), value: dragOffset)
         .contentShape(Rectangle())
         .onTapGesture {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            withAnimation(.easeInOut(duration: 0.25)) {
                 playbackViewModel.toggleSide()
                 if showFlipHint {
                     showFlipHint = false
@@ -403,6 +310,82 @@ struct CollectionCardView: View {
                     playbackViewModel.handleSwipe(translation: value.translation.width)
                 }
         )
+    }
+
+    // MARK: - Playback Controls
+
+    /// 再生ボタン（カードの外・直下）
+    private var playbackControlRow: some View {
+        HStack(spacing: 12) {
+            Button {
+                if playbackViewModel.isPlaying {
+                    playbackViewModel.stopPlayback()
+                } else {
+                    playbackViewModel.startPlayback()
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: playbackViewModel.isPlaying ? "stop.fill" : "play.fill")
+                    Text(playbackViewModel.isPlaying ? "停止" : "再生")
+                        .fontWeight(.semibold)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+            }
+            .buttonStyle(.borderedProminent)
+        }
+    }
+
+    // MARK: - Settings
+
+    private var playbackSettingsSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("再生設定")
+                .font(.headline)
+
+            // 読み上げ対象
+            Picker("読み上げ対象", selection: $playbackViewModel.speechTarget) {
+                ForEach(PlaybackSpeechTarget.allCases) { target in
+                    Text(target.title).tag(target)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            // 再生スピード（タップでシート）
+            Button {
+                showingSpeedPicker = true
+            } label: {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("再生スピード")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                        Text(playbackViewModel.playbackSpeedText)
+                            .font(.headline)
+                            .foregroundColor(.primary)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .padding()
+                .background(Color(uiColor: .tertiarySystemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
+            .buttonStyle(.plain)
+
+            // 次カードまでの待ち時間
+            VStack(alignment: .leading, spacing: 6) {
+                Text("自動送り: \(playbackViewModel.autoAdvanceDelayText)")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                Slider(value: $playbackViewModel.autoAdvanceDelay, in: 0...10, step: 0.5)
+            }
+        }
+        .padding()
+        .background(Color(uiColor: .secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 
     private func speedDescription(for rate: Double) -> String {
@@ -446,7 +429,4 @@ struct CollectionCardView: View {
     }
 }
 
-private enum SidePreviewDirection {
-    case previous
-    case next
-}
+
