@@ -80,6 +80,7 @@ struct CollectionCardView: View {
             refreshCards()
             playbackViewModel.playbackRate = settingsService.settings.playbackRate
             playbackViewModel.autoAdvanceDelay = settingsService.settings.playbackAutoAdvanceDelay
+            playbackViewModel.frontToBackDelay = settingsService.settings.playbackFrontToBackDelay
             playbackViewModel.speechTarget = PlaybackSpeechTarget(rawValue: settingsService.settings.playbackSpeechTargetRawValue) ?? .frontOnly
             showFlipHint = !settingsService.settings.hasSeenCardFlipHint
         }
@@ -88,6 +89,9 @@ struct CollectionCardView: View {
         }
         .onChange(of: playbackViewModel.autoAdvanceDelay) { _, newValue in
             settingsService.updatePlaybackAutoAdvanceDelay(newValue)
+        }
+        .onChange(of: playbackViewModel.frontToBackDelay) { _, newValue in
+            settingsService.updatePlaybackFrontToBackDelay(newValue)
         }
         .onChange(of: playbackViewModel.speechTarget) { _, newValue in
             settingsService.updatePlaybackSpeechTarget(newValue.rawValue)
@@ -321,7 +325,7 @@ struct CollectionCardView: View {
     // MARK: - Settings
 
     private var playbackSettingsSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 16) {
             Text("再生設定")
                 .font(.headline)
 
@@ -342,41 +346,91 @@ struct CollectionCardView: View {
                     Spacer()
                     Text(playbackViewModel.playbackSpeedText)
                         .font(.subheadline.monospacedDigit().weight(.semibold))
-                        .foregroundColor(.primary)
                 }
                 HStack(spacing: 8) {
-                    Text("0.25x")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
+                    Text("0.25x").font(.caption2).foregroundColor(.secondary)
                     Slider(value: $playbackViewModel.playbackRate, in: 0.25...2.0, step: 0.25)
                         .tint(.blue)
-                    Text("2.0x")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
+                    Text("2.0x").font(.caption2).foregroundColor(.secondary)
                 }
             }
 
-            // 自動送り待ち時間（スライダー）
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text("自動送り")
-                        .font(.subheadline)
+            // タイミング（2列グリッドピッカー）
+            // 表→裏 と 裏→次カード を横並びで表示
+            let timingSteps: [Double] = [0, 0.5, 1, 1.5, 2, 3, 5]
+
+            HStack(alignment: .top, spacing: 12) {
+                // 表→裏の間隔
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("表→裏")
+                        .font(.caption)
                         .foregroundColor(.secondary)
-                    Spacer()
-                    Text(playbackViewModel.autoAdvanceDelayText)
-                        .font(.subheadline.monospacedDigit().weight(.semibold))
-                        .foregroundColor(.primary)
+                    Menu {
+                        ForEach(timingSteps, id: \.self) { sec in
+                            Button {
+                                playbackViewModel.frontToBackDelay = sec
+                            } label: {
+                                HStack {
+                                    Text(sec == 0 ? "すぐ" : String(format: sec.truncatingRemainder(dividingBy: 1) == 0 ? "%.0f秒" : "%.1f秒", sec))
+                                    if abs(playbackViewModel.frontToBackDelay - sec) < 0.01 {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+                    } label: {
+                        HStack {
+                            Text(playbackViewModel.frontToBackDelay == 0 ? "すぐ" : String(format: playbackViewModel.frontToBackDelay.truncatingRemainder(dividingBy: 1) == 0 ? "%.0f秒" : "%.1f秒", playbackViewModel.frontToBackDelay))
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundColor(.primary)
+                            Spacer()
+                            Image(systemName: "chevron.up.chevron.down")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 9)
+                        .background(Color(uiColor: .tertiarySystemBackground))
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
                 }
-                HStack(spacing: 8) {
-                    Text("なし")
-                        .font(.caption2)
+                .frame(maxWidth: .infinity)
+
+                // 裏→次カードの間隔
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("裏→次のカード")
+                        .font(.caption)
                         .foregroundColor(.secondary)
-                    Slider(value: $playbackViewModel.autoAdvanceDelay, in: 0...10, step: 0.5)
-                        .tint(.blue)
-                    Text("10秒")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
+                    Menu {
+                        ForEach(timingSteps, id: \.self) { sec in
+                            Button {
+                                playbackViewModel.autoAdvanceDelay = sec
+                            } label: {
+                                HStack {
+                                    Text(sec == 0 ? "すぐ" : String(format: sec.truncatingRemainder(dividingBy: 1) == 0 ? "%.0f秒" : "%.1f秒", sec))
+                                    if abs(playbackViewModel.autoAdvanceDelay - sec) < 0.01 {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+                    } label: {
+                        HStack {
+                            Text(playbackViewModel.autoAdvanceDelay == 0 ? "すぐ" : String(format: playbackViewModel.autoAdvanceDelay.truncatingRemainder(dividingBy: 1) == 0 ? "%.0f秒" : "%.1f秒", playbackViewModel.autoAdvanceDelay))
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundColor(.primary)
+                            Spacer()
+                            Image(systemName: "chevron.up.chevron.down")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 9)
+                        .background(Color(uiColor: .tertiarySystemBackground))
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
                 }
+                .frame(maxWidth: .infinity)
             }
         }
         .padding()

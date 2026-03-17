@@ -38,7 +38,13 @@ class SettingsService: ObservableObject {
     
     func updatePlaybackRate(_ rate: Double) {
         var newSettings = settings
-        newSettings.playbackRate = min(max(rate, 0.3), 0.72)
+        newSettings.playbackRate = min(max(rate, 0.25), 2.0)
+        updateSettings(newSettings)
+    }
+
+    func updatePlaybackFrontToBackDelay(_ delay: Double) {
+        var newSettings = settings
+        newSettings.playbackFrontToBackDelay = min(max(delay, 0), 10)
         updateSettings(newSettings)
     }
 

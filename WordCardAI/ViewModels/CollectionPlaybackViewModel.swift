@@ -17,7 +17,8 @@ final class CollectionPlaybackViewModel: ObservableObject {
     @Published var isPlaying = false
     @Published var playbackRate: Double = 1.0
     @Published var speechTarget: PlaybackSpeechTarget = .frontOnly
-    @Published var autoAdvanceDelay: Double = 0.8
+    @Published var autoAdvanceDelay: Double = 2.0   // 裏→次カードの間隔
+    @Published var frontToBackDelay: Double = 1.0   // 表→裏の間隔
 
     private let speechService: SpeechService
 
@@ -150,9 +151,16 @@ final class CollectionPlaybackViewModel: ObservableObject {
             self.isShowingBack = false
             speechService.speak(card.japanese, rate: Float(playbackRate)) { [weak self] in
                 guard let self, self.isPlaying else { return }
-                self.isShowingBack = true
-                self.speechService.speak(card.english, rate: Float(self.playbackRate)) { [weak self] in
-                    self?.advanceAfterPlayback()
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    if self.frontToBackDelay > 0 {
+                        try? await Task.sleep(for: .seconds(self.frontToBackDelay))
+                    }
+                    guard self.isPlaying else { return }
+                    self.isShowingBack = true
+                    self.speechService.speak(card.english, rate: Float(self.playbackRate)) { [weak self] in
+                        self?.advanceAfterPlayback()
+                    }
                 }
             }
         }
