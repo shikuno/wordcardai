@@ -93,4 +93,23 @@ class CardsViewModel: ObservableObject {
             errorMessage = "カードの保存に失敗しました: \(error.localizedDescription)"
         }
     }
+    
+    func replaceCard(_ card: WordCard) {
+        if let index = allCards.firstIndex(where: { $0.id == card.id }) {
+            allCards[index] = card
+            saveCards()
+            if cards.contains(where: { $0.id == card.id }) {
+                loadCards(for: card.collectionId)
+            }
+        }
+    }
+
+    func recordLearningResult(for cardId: UUID, transform: (inout WordCard) -> Void) {
+        guard let index = allCards.firstIndex(where: { $0.id == cardId }) else { return }
+        transform(&allCards[index])
+        saveCards()
+        if cards.contains(where: { $0.id == cardId }) {
+            loadCards(for: allCards[index].collectionId)
+        }
+    }
 }

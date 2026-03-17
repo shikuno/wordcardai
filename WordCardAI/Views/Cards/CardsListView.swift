@@ -67,7 +67,9 @@ struct CardsListView: View {
             )
         }
         .sheet(isPresented: $showingLearnMode) {
-            LearnModeView(cards: cardsViewModel.cards)
+            LearnModeView(cards: cardsViewModel.cards) { updatedCard in
+                cardsViewModel.replaceCard(updatedCard)
+            }
         }
     }
     
@@ -130,26 +132,22 @@ struct CardsListView: View {
 
 struct CardRow: View {
     let card: WordCard
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(card.japanese)
-                .font(.body)
-                .foregroundColor(.primary)
-            
+            HStack(alignment: .firstTextBaseline) {
+                Text(card.japanese)
+                    .font(.body)
+                    .foregroundColor(.primary)
+                Spacer()
+                Text(card.learningStatus.displayName)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
             Text(card.english)
                 .font(.subheadline)
                 .foregroundColor(.secondary)
-            
-            if !card.tags.isEmpty {
-                HStack(spacing: 4) {
-                    ForEach(card.tags, id: \.self) { tag in
-                        Text("#\(tag)")
-                            .font(.caption)
-                            .foregroundColor(.blue)
-                    }
-                }
-            }
         }
         .padding(.vertical, 4)
     }

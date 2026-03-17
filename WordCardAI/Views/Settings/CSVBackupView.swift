@@ -113,10 +113,10 @@ struct CSVBackupView: View {
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                Text("出力カラム")
+                Text("出力項目")
                     .font(.caption)
                     .foregroundColor(.secondary)
-                Text(CSVService.columns.joined(separator: ", "))
+                Text("Japanese, English")
                     .font(.caption2)
                     .foregroundColor(.secondary)
             }
@@ -140,10 +140,10 @@ struct CSVBackupView: View {
     private var importSection: some View {
         Section {
             VStack(alignment: .leading, spacing: 8) {
-                Text("読み込みカラム")
+                Text("読み込み項目")
                     .font(.caption)
                     .foregroundColor(.secondary)
-                Text("Japanese, English は必須 / Comment, Tags は任意")
+                Text("Japanese, English を中心に読み込みます")
                     .font(.caption2)
                     .foregroundColor(.secondary)
             }
@@ -167,6 +167,8 @@ struct CSVBackupView: View {
             if collectionsViewModel.collections.isEmpty {
                 Text("インポートするには、先に単語帳を作成してください")
                     .foregroundColor(.orange)
+            } else {
+                Text("日本語と英語が入っていれば取り込みできます")
             }
         }
     }

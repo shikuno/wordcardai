@@ -5,30 +5,31 @@ struct CreateEditCardView: View {
     let collection: CardCollection
     @ObservedObject var cardsViewModel: CardsViewModel
     @ObservedObject var settingsService: SettingsService
-    
+
     @StateObject private var viewModel: CreateCardViewModel
+    private let speechService = SpeechService.shared
     @FocusState private var focusedField: Field?
-    
+
     let card: WordCard?
     private let isEditing: Bool
-    
+
     enum Field {
-        case japanese, english, note, tags
+        case japanese, english, note
     }
-    
+
     init(collection: CardCollection, cardsViewModel: CardsViewModel, settingsService: SettingsService, card: WordCard?) {
         self.collection = collection
         self.cardsViewModel = cardsViewModel
         self.settingsService = settingsService
         self.card = card
         self.isEditing = card != nil
-        
+
         _viewModel = StateObject(wrappedValue: CreateCardViewModel(
             translationService: TranslationServiceFactory.createService(settings: settingsService.settings),
             candidateCount: settingsService.settings.candidateCount
         ))
     }
-    
+
     var body: some View {
         NavigationStack {
             Form {
@@ -61,6 +62,9 @@ struct CreateEditCardView: View {
                 }
                 focusedField = .japanese
             }
+            .onDisappear {
+                speechService.stop()
+            }
             .alert("エラー", isPresented: .constant(viewModel.errorMessage != nil)) {
                 Button("OK") {
                     viewModel.errorMessage = nil
@@ -72,17 +76,24 @@ struct CreateEditCardView: View {
             }
         }
     }
-    
+
     private var japaneseSection: some View {
         Section {
             TextField("日本語を入力", text: $viewModel.japanese, axis: .vertical)
                 .focused($focusedField, equals: .japanese)
                 .lineLimit(3...6)
+
+            Button {
+                speechService.speak(viewModel.japanese)
+            } label: {
+                Label("日本語を再生", systemImage: "speaker.wave.2.fill")
+            }
+            .disabled(viewModel.japanese.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         } header: {
             Text("日本語 *")
         }
     }
-    
+
     private var generateButton: some View {
         Section {
             Button(action: { generateCandidates() }) {
@@ -102,19 +113,26 @@ struct CreateEditCardView: View {
             .disabled(viewModel.japanese.isEmpty || viewModel.isGenerating)
         }
     }
-    
+
     private var englishSection: some View {
         Section {
             TextField("英語を入力または候補から選択", text: $viewModel.english, axis: .vertical)
                 .focused($focusedField, equals: .english)
                 .lineLimit(3...6)
+
+            Button {
+                speechService.speak(viewModel.english)
+            } label: {
+                Label("英語を再生", systemImage: "speaker.wave.2")
+            }
+            .disabled(viewModel.english.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         } header: {
             Text("英語 *")
         } footer: {
             Text("候補から選択するか、直接編集できます")
         }
     }
-    
+
     @ViewBuilder
     private var candidatesSection: some View {
         if !viewModel.candidates.isEmpty {
@@ -140,35 +158,24 @@ struct CreateEditCardView: View {
             }
         }
     }
-    
+
     private var optionalFieldsSection: some View {
-        Group {
-            Section {
-                TextField("メモを入力（任意）", text: $viewModel.note, axis: .vertical)
-                    .focused($focusedField, equals: .note)
-                    .lineLimit(2...4)
-            } header: {
-                Text("メモ（任意）")
-            }
-            
-            Section {
-                TextField("タグをカンマ区切りで入力", text: $viewModel.tagsText)
-                    .focused($focusedField, equals: .tags)
-            } header: {
-                Text("タグ（任意）")
-            } footer: {
-                Text("例: 挨拶, ビジネス, 旅行")
-            }
+        Section {
+            TextField("メモを入力（任意）", text: $viewModel.note, axis: .vertical)
+                .focused($focusedField, equals: .note)
+                .lineLimit(2...4)
+        } header: {
+            Text("メモ（任意）")
         }
     }
-    
+
     private func generateCandidates() {
         focusedField = nil
         Task {
             await viewModel.generateCandidates()
         }
     }
-    
+
     private func saveCard() {
         if isEditing, let existingCard = card {
             let updatedCard = viewModel.updateCard(existingCard)
