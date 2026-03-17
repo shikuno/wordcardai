@@ -17,6 +17,7 @@ struct CollectionCardView: View {
     @State private var showingList = false
     @State private var showingCreateCard = false
     @State private var showingLearnMode = false
+    @GestureState private var dragOffset: CGFloat = 0
 
     init(collection: CardCollection, cardsViewModel: CardsViewModel, collectionsViewModel: CollectionsViewModel) {
         self.collection = collection
@@ -33,6 +34,7 @@ struct CollectionCardView: View {
                 emptyStateView
             } else {
                 headerSection
+                actionShortcutSection
                 cardSection
                 playbackSettingsSection
                 controlSection
@@ -111,15 +113,39 @@ struct CollectionCardView: View {
         }
     }
 
+    private var actionShortcutSection: some View {
+        HStack(spacing: 12) {
+            Button {
+                showingCreateCard = true
+            } label: {
+                Label("新規カード追加", systemImage: "plus.circle.fill")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+
+            Button {
+                showingList = true
+            } label: {
+                Label("一覧で編集", systemImage: "square.and.pencil")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+        }
+    }
+
     private var cardSection: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 14) {
             if let card = playbackViewModel.currentCard {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 20)
+                    RoundedRectangle(cornerRadius: 24)
                         .fill(Color.systemSecondaryBackgroundCompat)
-                        .shadow(radius: 5)
+                        .shadow(radius: 6)
 
-                    VStack(spacing: 20) {
+                    VStack(spacing: 18) {
+                        Text(playbackViewModel.isShowingBack ? "裏面" : "表面")
+                            .font(.caption.weight(.semibold))
+                            .foregroundColor(.secondary)
+
                         Text(card.japanese)
                             .font(.title)
                             .fontWeight(.bold)
@@ -134,18 +160,44 @@ struct CollectionCardView: View {
                                 .foregroundColor(.blue)
                                 .multilineTextAlignment(.center)
                                 .padding(.horizontal)
+                                .transition(.opacity.combined(with: .scale))
                         }
                     }
                     .padding()
                 }
                 .frame(maxWidth: .infinity)
-                .frame(height: 320)
+                .frame(height: 340)
+                .offset(x: dragOffset)
+                .rotationEffect(.degrees(Double(dragOffset / 20)))
+                .animation(.spring(response: 0.28, dampingFraction: 0.85), value: dragOffset)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        playbackViewModel.toggleSide()
+                    }
+                }
+                .gesture(
+                    DragGesture(minimumDistance: 20)
+                        .updating($dragOffset) { value, state, _ in
+                            state = value.translation.width
+                        }
+                        .onEnded { value in
+                            playbackViewModel.handleSwipe(translation: value.translation.width)
+                        }
+                )
             }
 
-            Button(playbackViewModel.isShowingBack ? "表に戻す" : "裏を表示") {
-                playbackViewModel.toggleSide()
+            VStack(spacing: 6) {
+                Label("カードをタップで表裏切替", systemImage: "hand.tap")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                HStack(spacing: 12) {
+                    Label("右へスワイプで前へ", systemImage: "arrow.left")
+                    Label("左へスワイプで次へ", systemImage: "arrow.right")
+                }
+                .font(.caption2)
+                .foregroundColor(.secondary)
             }
-            .buttonStyle(.bordered)
         }
     }
 
@@ -154,19 +206,33 @@ struct CollectionCardView: View {
             Text("再生モード")
                 .font(.headline)
 
-            Picker("スピード", selection: $playbackViewModel.playbackSpeed) {
-                ForEach(PlaybackSpeed.allCases) { speed in
-                    Text(speed.title).tag(speed)
-                }
-            }
-            .pickerStyle(.segmented)
-
             Picker("読み上げ対象", selection: $playbackViewModel.speechTarget) {
                 ForEach(PlaybackSpeechTarget.allCases) { target in
                     Text(target.title).tag(target)
                 }
             }
             .pickerStyle(.segmented)
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("再生スピード")
+                        .font(.subheadline)
+                    Spacer()
+                    Text(playbackViewModel.playbackSpeedLabel)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                Slider(value: $playbackViewModel.playbackRate, in: 0.3...0.72, step: 0.02)
+                HStack {
+                    Text("ゆっくり")
+                    Spacer()
+                    Text("標準")
+                    Spacer()
+                    Text("速い")
+                }
+                .font(.caption2)
+                .foregroundColor(.secondary)
+            }
 
             VStack(alignment: .leading, spacing: 6) {
                 Text("次のカードまでの待ち時間: \(playbackViewModel.autoAdvanceDelay, specifier: "%.1f")秒")
@@ -181,48 +247,26 @@ struct CollectionCardView: View {
     }
 
     private var controlSection: some View {
-        VStack(spacing: 12) {
-            HStack(spacing: 12) {
-                Button {
-                    playbackViewModel.goPrevious()
-                } label: {
-                    Label("前へ", systemImage: "chevron.left")
-                        .frame(maxWidth: .infinity)
+        HStack(spacing: 12) {
+            Button {
+                if playbackViewModel.isPlaying {
+                    playbackViewModel.stopPlayback()
+                } else {
+                    playbackViewModel.startPlayback()
                 }
-                .buttonStyle(.bordered)
-                .disabled(!playbackViewModel.canGoPrevious)
-
-                Button {
-                    playbackViewModel.goNext()
-                } label: {
-                    Label("次へ", systemImage: "chevron.right")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .disabled(!playbackViewModel.canGoNext)
+            } label: {
+                Label(playbackViewModel.isPlaying ? "停止" : "再生", systemImage: playbackViewModel.isPlaying ? "stop.fill" : "play.fill")
+                    .frame(maxWidth: .infinity)
             }
+            .buttonStyle(.borderedProminent)
 
-            HStack(spacing: 12) {
-                Button {
-                    if playbackViewModel.isPlaying {
-                        playbackViewModel.stopPlayback()
-                    } else {
-                        playbackViewModel.startPlayback()
-                    }
-                } label: {
-                    Label(playbackViewModel.isPlaying ? "停止" : "再生", systemImage: playbackViewModel.isPlaying ? "stop.fill" : "play.fill")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-
-                Button {
-                    showingLearnMode = true
-                } label: {
-                    Label("学習モード", systemImage: "graduationcap.fill")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
+            Button {
+                showingLearnMode = true
+            } label: {
+                Label("学習モード", systemImage: "graduationcap.fill")
+                    .frame(maxWidth: .infinity)
             }
+            .buttonStyle(.bordered)
         }
     }
 
@@ -234,6 +278,10 @@ struct CollectionCardView: View {
                 .foregroundColor(.secondary)
             Text("このカード集にはまだカードがありません")
                 .font(.headline)
+            Text("まずはカードを追加して、あとから一覧で編集できます")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
             Button("カードを追加") {
                 showingCreateCard = true
             }

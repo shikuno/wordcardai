@@ -15,7 +15,7 @@ final class CollectionPlaybackViewModel: ObservableObject {
     @Published var currentIndex: Int = 0
     @Published var isShowingBack: Bool = false
     @Published var isPlaying = false
-    @Published var playbackSpeed: PlaybackSpeed = .normal
+    @Published var playbackRate: Double = 0.5
     @Published var speechTarget: PlaybackSpeechTarget = .frontOnly
     @Published var autoAdvanceDelay: Double = 0.8
 
@@ -39,20 +39,46 @@ final class CollectionPlaybackViewModel: ObservableObject {
     var canGoPrevious: Bool { currentIndex > 0 }
     var canGoNext: Bool { currentIndex < cards.count - 1 }
 
+    var playbackSpeedLabel: String {
+        switch playbackRate {
+        case ..<0.4:
+            return "かなりゆっくり"
+        case ..<0.48:
+            return "ゆっくり"
+        case ..<0.58:
+            return "標準"
+        case ..<0.65:
+            return "やや速い"
+        default:
+            return "かなり速い"
+        }
+    }
+
     func goNext() {
         guard canGoNext else { return }
+        stopPlayback()
         currentIndex += 1
         isShowingBack = false
     }
 
     func goPrevious() {
         guard canGoPrevious else { return }
+        stopPlayback()
         currentIndex -= 1
         isShowingBack = false
     }
 
     func toggleSide() {
         isShowingBack.toggle()
+    }
+
+    func handleSwipe(translation: CGFloat) {
+        let threshold: CGFloat = 70
+        if translation < -threshold {
+            goNext()
+        } else if translation > threshold {
+            goPrevious()
+        }
     }
 
     func stopPlayback() {
@@ -89,20 +115,20 @@ final class CollectionPlaybackViewModel: ObservableObject {
 
         switch speechTarget {
         case .frontOnly:
-            speechService.speak(card.japanese, rate: playbackSpeed.rate) { [weak self] in
+            speechService.speak(card.japanese, rate: Float(playbackRate)) { [weak self] in
                 self?.advanceAfterPlayback()
             }
         case .backOnly:
             self.isShowingBack = true
-            speechService.speak(card.english, rate: playbackSpeed.rate) { [weak self] in
+            speechService.speak(card.english, rate: Float(playbackRate)) { [weak self] in
                 self?.advanceAfterPlayback()
             }
         case .frontAndBack:
             self.isShowingBack = false
-            speechService.speak(card.japanese, rate: playbackSpeed.rate) { [weak self] in
+            speechService.speak(card.japanese, rate: Float(playbackRate)) { [weak self] in
                 guard let self, self.isPlaying else { return }
                 self.isShowingBack = true
-                self.speechService.speak(card.english, rate: self.playbackSpeed.rate) { [weak self] in
+                self.speechService.speak(card.english, rate: Float(self.playbackRate)) { [weak self] in
                     self?.advanceAfterPlayback()
                 }
             }
@@ -121,30 +147,6 @@ final class CollectionPlaybackViewModel: ObservableObject {
             } else {
                 stopPlayback()
             }
-        }
-    }
-}
-
-enum PlaybackSpeed: String, CaseIterable, Identifiable {
-    case slow
-    case normal
-    case fast
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .slow: return "ゆっくり"
-        case .normal: return "標準"
-        case .fast: return "はやい"
-        }
-    }
-
-    var rate: Float {
-        switch self {
-        case .slow: return 0.35
-        case .normal: return 0.5
-        case .fast: return 0.58
         }
     }
 }
