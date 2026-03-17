@@ -8,14 +8,22 @@
 import SwiftUI
 
 struct ContentView: View {
-    // App から環境経由で渡される ViewModel やサービス
     @EnvironmentObject var settingsService: SettingsService
     @EnvironmentObject var collectionsViewModel: CollectionsViewModel
     @EnvironmentObject var cardsViewModel: CardsViewModel
-    
+
     var body: some View {
-        // アプリのホーム画面としてコレクション一覧を表示
-        CollectionsListView(storage: UserDefaultsStorage(), cardsViewModel: cardsViewModel)
+        TabView {
+            CollectionsListView(storage: UserDefaultsStorage(), cardsViewModel: cardsViewModel)
+                .tabItem {
+                    Label("カード集", systemImage: "rectangle.stack.fill")
+                }
+
+            AIChatView()
+                .tabItem {
+                    Label("AI相談", systemImage: "bubble.left.and.bubble.right.fill")
+                }
+        }
     }
 }
 
