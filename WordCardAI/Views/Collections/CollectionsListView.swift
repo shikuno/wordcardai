@@ -68,7 +68,7 @@ struct CollectionsListView: View {
     private var collectionsList: some View {
         List {
             ForEach(viewModel.collections) { collection in
-                NavigationLink(destination: CardsListView(
+                NavigationLink(destination: CollectionCardView(
                     collection: collection,
                     cardsViewModel: cardsViewModel,
                     collectionsViewModel: viewModel

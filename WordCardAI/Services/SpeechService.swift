@@ -14,6 +14,7 @@ final class SpeechService: NSObject {
     static let shared = SpeechService()
 
     private let synthesizer = AVSpeechSynthesizer()
+    private var onFinish: (() -> Void)?
 
     private override init() {
         super.init()
@@ -21,8 +22,17 @@ final class SpeechService: NSObject {
     }
 
     func speak(_ text: String) {
+        speak(text, rate: AVSpeechUtteranceDefaultSpeechRate, onFinish: nil)
+    }
+
+    func speak(_ text: String, rate: Float, onFinish: (() -> Void)? = nil) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty else {
+            onFinish?()
+            return
+        }
+
+        self.onFinish = onFinish
 
         if synthesizer.isSpeaking {
             synthesizer.stopSpeaking(at: .immediate)
@@ -30,7 +40,7 @@ final class SpeechService: NSObject {
 
         let utterance = AVSpeechUtterance(string: trimmed)
         utterance.voice = AVSpeechSynthesisVoice(language: detectLanguageCode(for: trimmed))
-        utterance.rate = AVSpeechUtteranceDefaultSpeechRate
+        utterance.rate = rate
         utterance.pitchMultiplier = 1.0
         utterance.preUtteranceDelay = 0.05
         utterance.postUtteranceDelay = 0.05
@@ -38,6 +48,7 @@ final class SpeechService: NSObject {
     }
 
     func stop() {
+        onFinish = nil
         synthesizer.stopSpeaking(at: .immediate)
     }
 
@@ -65,8 +76,18 @@ final class SpeechService: NSObject {
 
 extension SpeechService: AVSpeechSynthesizerDelegate {
     nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didStart utterance: AVSpeechUtterance) {}
-    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {}
-    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {}
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        Task { @MainActor in
+            let callback = self.onFinish
+            self.onFinish = nil
+            callback?()
+        }
+    }
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+        Task { @MainActor in
+            self.onFinish = nil
+        }
+    }
 }
 
 private extension String {
