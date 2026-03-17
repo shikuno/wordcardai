@@ -15,7 +15,7 @@ final class CollectionPlaybackViewModel: ObservableObject {
     @Published var currentIndex: Int = 0
     @Published var isShowingBack: Bool = false
     @Published var isPlaying = false
-    @Published var playbackRate: Double = 0.5
+    @Published var playbackRate: Double = 1.0
     @Published var speechTarget: PlaybackSpeechTarget = .frontOnly
     @Published var autoAdvanceDelay: Double = 0.8
 

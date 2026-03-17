@@ -333,59 +333,49 @@ struct CollectionCardView: View {
             }
             .pickerStyle(.segmented)
 
-            // 再生スピード（ボタン選択）
-            VStack(alignment: .leading, spacing: 8) {
-                Text("再生スピード")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-
-                let presets: [Double] = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
-                HStack(spacing: 6) {
-                    ForEach(presets, id: \.self) { rate in
-                        let isSelected = abs(playbackViewModel.playbackRate - rate) < 0.01
-                        Button {
-                            playbackViewModel.playbackRate = rate
-                        } label: {
-                            Text(String(format: "%.2gx", rate))
-                                .font(.caption.weight(.semibold))
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 8)
-                                .background(isSelected ? Color.blue : Color(uiColor: .tertiarySystemBackground))
-                                .foregroundColor(isSelected ? .white : .primary)
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
-                        }
-                        .buttonStyle(.plain)
-                    }
+            // 再生スピード（スライダー）
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("再生スピード")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text(playbackViewModel.playbackSpeedText)
+                        .font(.subheadline.monospacedDigit().weight(.semibold))
+                        .foregroundColor(.primary)
+                }
+                HStack(spacing: 8) {
+                    Text("0.25x")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                    Slider(value: $playbackViewModel.playbackRate, in: 0.25...2.0, step: 0.25)
+                        .tint(.blue)
+                    Text("2.0x")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
                 }
             }
 
-            // 自動送り待ち時間（カスタム刻み）
-            VStack(alignment: .leading, spacing: 8) {
-                Text("自動送り: \(playbackViewModel.autoAdvanceDelayText)")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-
-                // 0〜3秒は0.5刻み、3〜6秒は1秒刻み、6〜10秒は2秒刻み
-                let delaySteps: [Double] = [0, 0.5, 1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        ForEach(delaySteps, id: \.self) { sec in
-                            let isSelected = abs(playbackViewModel.autoAdvanceDelay - sec) < 0.01
-                            Button {
-                                playbackViewModel.autoAdvanceDelay = sec
-                            } label: {
-                                Text(sec == 0 ? "なし" : "\(sec.formatted())秒")
-                                    .font(.caption.weight(.semibold))
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 7)
-                                    .background(isSelected ? Color.blue : Color(uiColor: .tertiarySystemBackground))
-                                    .foregroundColor(isSelected ? .white : .primary)
-                                    .clipShape(Capsule())
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .padding(.vertical, 2)
+            // 自動送り待ち時間（スライダー）
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("自動送り")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text(playbackViewModel.autoAdvanceDelayText)
+                        .font(.subheadline.monospacedDigit().weight(.semibold))
+                        .foregroundColor(.primary)
+                }
+                HStack(spacing: 8) {
+                    Text("なし")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                    Slider(value: $playbackViewModel.autoAdvanceDelay, in: 0...10, step: 0.5)
+                        .tint(.blue)
+                    Text("10秒")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
                 }
             }
         }

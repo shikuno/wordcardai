@@ -40,7 +40,11 @@ final class SpeechService: NSObject {
 
         let utterance = AVSpeechUtterance(string: trimmed)
         utterance.voice = AVSpeechSynthesisVoice(language: detectLanguageCode(for: trimmed))
-        utterance.rate = rate
+        // ユーザー倍率（0.25〜2.0）→ AVFoundation rate（0.0〜1.0）に変換
+        // 1.0x = AVSpeechUtteranceDefaultSpeechRate(0.5) を基準にリニアマッピング
+        // 0.25x→0.15, 0.5x→0.25, 1.0x→0.5, 1.5x→0.7, 2.0x→0.9
+        let avRate = AVSpeechUtteranceDefaultSpeechRate * rate
+        utterance.rate = min(max(avRate, AVSpeechUtteranceMinimumSpeechRate), AVSpeechUtteranceMaximumSpeechRate)
         utterance.pitchMultiplier = 1.0
         utterance.preUtteranceDelay = 0.05
         utterance.postUtteranceDelay = 0.05
