@@ -12,12 +12,11 @@ import Combine
 @MainActor
 class LearnModeViewModel: ObservableObject {
     @Published var cards: [WordCard] = []
+    @Published var selectedCards: [WordCard] = []   // 会話練習に渡す用
     @Published var currentIndex: Int = 0
     @Published var isShowingAnswer: Bool = false
     @Published var questionCount: Int = 10
-    @Published var mode: LearnSessionMode = .normal
     @Published var order: LearnCardOrder = .random
-    @Published var startFrom: LearnStartPosition = .beginning
     @Published var isConfigured: Bool = false
     @Published var sessionCompleted = false
 
@@ -64,36 +63,14 @@ class LearnModeViewModel: ObservableObject {
 
     func startSession(with sourceCards: [WordCard]) {
         var pool: [WordCard]
-
-        // --- 順番 ---
         switch order {
-        case .random:
-            pool = sourceCards.shuffled()
-        case .topToBottom:
-            pool = sourceCards
-        case .bottomToTop:
-            pool = sourceCards.reversed()
+        case .random:      pool = sourceCards.shuffled()
+        case .topToBottom: pool = sourceCards
+        case .bottomToTop: pool = sourceCards.reversed()
         }
+        pool = Array(pool.prefix(questionCount))
 
-        // --- 学習モード（spacedRepetitionは独自ソート優先） ---
-        if mode == .spacedRepetition {
-            pool = selectSpacedRepetitionCards(from: pool)
-        } else {
-            // --- 開始位置（通常モード） ---
-            switch startFrom {
-            case .beginning:
-                break
-            case .middle:
-                let mid = pool.count / 2
-                pool = Array(pool[mid...] + pool[..<mid])
-            case .notMastered:
-                let notMastered = pool.filter { $0.learningStatus != .mastered }
-                let mastered = pool.filter { $0.learningStatus == .mastered }
-                pool = notMastered + mastered
-            }
-            pool = Array(pool.prefix(questionCount))
-        }
-
+        selectedCards = pool   // 会話練習用に保持
         cards = pool
         currentIndex = 0
         isShowingAnswer = false
@@ -208,23 +185,10 @@ class LearnModeViewModel: ObservableObject {
 
 enum LearnSessionMode: String, CaseIterable, Identifiable {
     case normal
-    case spacedRepetition
 
     var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .normal: return "通常"
-        case .spacedRepetition: return "忘却曲線"
-        }
-    }
-
-    var description: String {
-        switch self {
-        case .normal: return "設定した順番で出題"
-        case .spacedRepetition: return "復習期限が来たカードを優先"
-        }
-    }
+    var title: String { "通常" }
+    var description: String { "設定した順番で出題" }
 }
 
 enum LearnCardOrder: String, CaseIterable, Identifiable {

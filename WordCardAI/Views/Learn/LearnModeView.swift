@@ -24,6 +24,15 @@ extension Color {
     }
 }
 
+// MARK: - 学習モードのステップ管理
+
+enum LearnStep {
+    case modeSelect          // ① モード選択
+    case settings            // ② 設定（問題数・順番）
+    case flashcard           // ③ フラッシュカード本番
+    case conversation        // ③ 会話練習本番
+}
+
 struct LearnModeView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var viewModel = LearnModeViewModel()
@@ -31,6 +40,9 @@ struct LearnModeView: View {
 
     let cards: [WordCard]
     let onUpdateCard: ((WordCard) -> Void)?
+
+    @State private var step: LearnStep = .modeSelect
+    @State private var selectedMode: LearnPracticeMode = .flashcard
 
     init(cards: [WordCard], onUpdateCard: ((WordCard) -> Void)? = nil) {
         self.cards = cards
@@ -42,188 +54,236 @@ struct LearnModeView: View {
             Group {
                 if cards.isEmpty {
                     emptyStateView
-                } else if viewModel.cards.isEmpty || !viewModel.isConfigured {
-                    sessionSetupView
-                } else if let card = viewModel.currentCard, !viewModel.sessionCompleted {
-                    learningContent(for: card)
                 } else {
-                    completionView
+                    switch step {
+                    case .modeSelect:
+                        modeSelectView
+                    case .settings:
+                        settingsView
+                    case .flashcard:
+                        flashcardSessionView
+                    case .conversation:
+                        // ConversationViewをsheet内に出す
+                        conversationPlaceholder
+                    }
                 }
             }
             .padding()
-            .navigationTitle("学習モード")
-            #if os(iOS)
+            .navigationTitle(navTitle)
             .navigationBarTitleDisplayMode(.inline)
-            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(action: {
-                        speechService.stop()
-                        dismiss()
-                    }) {
-                        Image(systemName: "xmark")
-                    }
-                }
-                ToolbarItem(placement: .primaryAction) {
-                    if !viewModel.cards.isEmpty {
-                        Button(action: { viewModel.resetSession(with: cards) }) {
-                            Image(systemName: "arrow.clockwise")
+                    Button {
+                        if step == .modeSelect {
+                            speechService.stop()
+                            dismiss()
+                        } else {
+                            // 前のステップへ戻る
+                            withAnimation { goBack() }
+                        }
+                    } label: {
+                        if step == .modeSelect {
+                            Image(systemName: "xmark")
+                        } else {
+                            HStack(spacing: 4) {
+                                Image(systemName: "chevron.left")
+                                Text("戻る")
+                            }
                         }
                     }
                 }
             }
-            .onAppear {
-                viewModel.prepare(with: cards)
-            }
-            .onDisappear {
-                speechService.stop()
-            }
+            .onAppear { viewModel.prepare(with: cards) }
+            .onDisappear { speechService.stop() }
+        }
+        .sheet(isPresented: Binding(
+            get: { step == .conversation },
+            set: { if !$0 { step = .settings } }
+        )) {
+        ConversationView(
+                cards: viewModel.selectedCards.isEmpty ? cards : viewModel.selectedCards,
+                collectionTitle: ""
+            )
         }
     }
 
-    private var sessionSetupView: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("出題設定")
-                        .font(.title2.bold())
-                    Text("問題数と学習モードを選んで開始できます。")
+    private var navTitle: String {
+        switch step {
+        case .modeSelect: return "学習"
+        case .settings: return selectedMode == .flashcard ? "フラッシュカード" : "会話練習"
+        case .flashcard: return "フラッシュカード"
+        case .conversation: return "会話練習"
+        }
+    }
+
+    private func goBack() {
+        switch step {
+        case .settings: step = .modeSelect
+        case .flashcard, .conversation: step = .settings
+        default: break
+        }
+    }
+
+    // MARK: - ① モード選択
+
+    private var modeSelectView: some View {
+        VStack(spacing: 20) {
+            Text("どのモードで練習しますか？")
+                .font(.title3.bold())
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            modeCard(
+                title: "フラッシュカード",
+                description: "カードを見て自己評価\n覚えた・あやしい・まだ無理",
+                icon: "rectangle.on.rectangle",
+                color: .blue
+            ) {
+                selectedMode = .flashcard
+                withAnimation { step = .settings }
+            }
+
+            modeCard(
+                title: "会話練習",
+                description: "相手のセリフに英語で返す\nAIがシチュエーションを生成",
+                icon: "bubble.left.and.bubble.right.fill",
+                color: .green
+            ) {
+                selectedMode = .conversation
+                withAnimation { step = .settings }
+            }
+
+            Spacer()
+
+            Text("全 \(cards.count) 枚のカード")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+    }
+
+    private func modeCard(title: String, description: String, icon: String, color: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 16) {
+                Image(systemName: icon)
+                    .font(.system(size: 28))
+                    .foregroundColor(color)
+                    .frame(width: 48)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                    Text(description)
+                        .font(.caption)
                         .foregroundColor(.secondary)
+                        .multilineTextAlignment(.leading)
                 }
 
-                // 問題数
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("問題数")
-                        .font(.headline)
-                    Picker("問題数", selection: $viewModel.questionCount) {
-                        ForEach(viewModel.availableQuestionCounts(for: cards), id: \.self) { count in
-                            Text("\(count)問").tag(count)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                }
+                Spacer()
 
-                // 順番
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("順番")
-                        .font(.headline)
-                    HStack(spacing: 8) {
-                        ForEach(LearnCardOrder.allCases) { ord in
-                            let selected = viewModel.order == ord
-                            Button {
-                                viewModel.order = ord
-                            } label: {
-                                HStack(spacing: 6) {
-                                    Image(systemName: ord.icon)
-                                    Text(ord.title)
-                                        .font(.subheadline.weight(.medium))
-                                }
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            .padding()
+            .background(Color.systemSecondaryBackgroundCompat)
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .overlay(RoundedRectangle(cornerRadius: 16).stroke(color.opacity(0.25), lineWidth: 1.5))
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - ② 設定
+
+    private var settingsView: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            // 問題数
+            VStack(alignment: .leading, spacing: 12) {
+                Text("問題数")
+                    .font(.headline)
+                let counts = viewModel.availableQuestionCounts(for: cards)
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 72))], spacing: 8) {
+                    ForEach(counts, id: \.self) { count in
+                        let selected = viewModel.questionCount == count
+                        Button {
+                            viewModel.questionCount = count
+                        } label: {
+                            Text("\(count)問")
+                                .font(.subheadline.weight(.semibold))
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 10)
                                 .background(selected ? Color.blue : Color.systemSecondaryBackgroundCompat)
                                 .foregroundColor(selected ? .white : .primary)
                                 .clipShape(RoundedRectangle(cornerRadius: 10))
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-
-                // 開始位置（忘却曲線モード以外で表示）
-                if viewModel.mode != .spacedRepetition {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("開始位置")
-                            .font(.headline)
-                        ForEach(LearnStartPosition.allCases) { pos in
-                            let selected = viewModel.startFrom == pos
-                            Button {
-                                viewModel.startFrom = pos
-                            } label: {
-                                HStack(spacing: 12) {
-                                    Image(systemName: pos.icon)
-                                        .frame(width: 24)
-                                        .foregroundColor(selected ? .blue : .secondary)
-                                    Text(pos.title)
-                                        .font(.subheadline)
-                                        .foregroundColor(.primary)
-                                    Spacer()
-                                    if selected {
-                                        Image(systemName: "checkmark.circle.fill")
-                                            .foregroundColor(.blue)
-                                    }
-                                }
-                                .padding()
-                                .background(Color.systemSecondaryBackgroundCompat)
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .stroke(selected ? Color.blue.opacity(0.5) : Color.clear, lineWidth: 1.5)
-                                )
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-
-                // 学習モード
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("学習モード")
-                        .font(.headline)
-                    ForEach(LearnSessionMode.allCases) { mode in
-                        Button {
-                            viewModel.mode = mode
-                        } label: {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(mode.title)
-                                        .font(.headline)
-                                        .foregroundColor(.primary)
-                                    Text(mode.description)
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                                Spacer()
-                                Image(systemName: viewModel.mode == mode ? "checkmark.circle.fill" : "circle")
-                                    .foregroundColor(viewModel.mode == mode ? .blue : .secondary)
-                            }
-                            .padding()
-                            .background(Color.systemSecondaryBackgroundCompat)
-                            .cornerRadius(14)
                         }
                         .buttonStyle(.plain)
                     }
                 }
+            }
 
-                learningSummaryCard
-
-                Button {
-                    viewModel.startSession(with: cards)
-                } label: {
-                    Text("\(viewModel.questionCount)問で開始")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.blue)
-                        .cornerRadius(14)
+            // 順番
+            VStack(alignment: .leading, spacing: 10) {
+                Text("順番")
+                    .font(.headline)
+                HStack(spacing: 8) {
+                    ForEach(LearnCardOrder.allCases) { ord in
+                        let selected = viewModel.order == ord
+                        Button {
+                            viewModel.order = ord
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: ord.icon)
+                                Text(ord.title)
+                                    .font(.subheadline.weight(.medium))
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .background(selected ? Color.blue : Color.systemSecondaryBackgroundCompat)
+                            .foregroundColor(selected ? .white : .primary)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
+            }
+
+            Spacer()
+
+            // スタートボタン
+            Button {
+                viewModel.startSession(with: cards)
+                withAnimation {
+                    step = selectedMode == .flashcard ? .flashcard : .conversation
+                }
+            } label: {
+                Text("\(viewModel.questionCount)問スタート")
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(selectedMode == .flashcard ? Color.blue : Color.green)
+                    .cornerRadius(14)
             }
         }
     }
 
-    private var learningSummaryCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label("学習対象", systemImage: "chart.bar.fill")
-                .font(.headline)
-            Text("全 \(cards.count) 枚")
-            Text("復習期限が来ているカード: \(viewModel.dueCardCount(in: cards)) 枚")
-                .foregroundColor(.secondary)
+    // MARK: - ③ フラッシュカード本番
+
+    private var flashcardSessionView: some View {
+        Group {
+            if let card = viewModel.currentCard, !viewModel.sessionCompleted {
+                learningContent(for: card)
+            } else {
+                completionView
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .background(Color.systemSecondaryBackgroundCompat)
-        .cornerRadius(14)
     }
+
+    // 会話練習はsheetで出すのでプレースホルダー
+    private var conversationPlaceholder: some View {
+        Color.clear.onAppear { step = .conversation }
+    }
+
+    // MARK: - フラッシュカード内部UI（既存流用）
 
     private func learningContent(for card: WordCard) -> some View {
         VStack(spacing: 0) {
@@ -252,39 +312,35 @@ struct LearnModeView: View {
     }
 
     private func flashCard(for card: WordCard) -> some View {
-        VStack(spacing: 20) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(Color.systemSecondaryBackgroundCompat)
-                    .shadow(radius: 5)
+        ZStack {
+            RoundedRectangle(cornerRadius: 20)
+                .fill(Color.systemSecondaryBackgroundCompat)
+                .shadow(radius: 5)
 
-                VStack(spacing: 20) {
-                    statusBadge(for: card)
+            VStack(spacing: 20) {
+                statusBadge(for: card)
 
-                    Text(card.japanese)
-                        .font(.title)
-                        .fontWeight(.bold)
+                Text(card.japanese)
+                    .font(.title)
+                    .fontWeight(.bold)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+
+                if viewModel.isShowingAnswer {
+                    Divider().padding(.horizontal, 40)
+                    Text(card.english)
+                        .font(.title2)
+                        .foregroundColor(.blue)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal)
-
-                    if viewModel.isShowingAnswer {
-                        Divider()
-                            .padding(.horizontal, 40)
-
-                        Text(card.english)
-                            .font(.title2)
-                            .foregroundColor(.blue)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal)
-                            .transition(.opacity.combined(with: .scale))
-                    }
+                        .transition(.opacity.combined(with: .scale))
                 }
-                .padding()
             }
-            .frame(maxWidth: .infinity)
-            .frame(height: 320)
-            .padding(.horizontal, 20)
+            .padding()
         }
+        .frame(maxWidth: .infinity)
+        .frame(height: 320)
+        .padding(.horizontal, 20)
     }
 
     private func statusBadge(for card: WordCard) -> some View {
@@ -296,11 +352,9 @@ struct LearnModeView: View {
                 .background(statusColor(for: card.learningStatus).opacity(0.15))
                 .foregroundColor(statusColor(for: card.learningStatus))
                 .cornerRadius(999)
-
-            if let nextReviewAt = card.nextReviewAt {
-                Text("次回: \(nextReviewAt.formatted(date: .abbreviated, time: .omitted))")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+            if let next = card.nextReviewAt {
+                Text("次回: \(next.formatted(date: .abbreviated, time: .omitted))")
+                    .font(.caption).foregroundColor(.secondary)
             }
         }
     }
@@ -312,22 +366,19 @@ struct LearnModeView: View {
                     speechService.speak(card.japanese)
                 }
                 speechButton(title: viewModel.isShowingAnswer ? "英語" : "自動", systemImage: "speaker.wave.2") {
-                    let text = viewModel.isShowingAnswer ? card.english : card.japanese
-                    speechService.speak(text)
+                    speechService.speak(viewModel.isShowingAnswer ? card.english : card.japanese)
                 }
             }
             .padding(.horizontal, 20)
 
-            Button(action: {
+            Button {
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                     viewModel.toggleAnswer()
                 }
-            }) {
+            } label: {
                 Text(viewModel.isShowingAnswer ? "答えを隠す" : "答えを見る")
-                    .font(.headline)
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding()
+                    .font(.headline).foregroundColor(.white)
+                    .frame(maxWidth: .infinity).padding()
                     .background(viewModel.isShowingAnswer ? Color.orange : Color.blue)
                     .cornerRadius(12)
             }
@@ -339,8 +390,7 @@ struct LearnModeView: View {
     private func speechButton(title: String, systemImage: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Label(title, systemImage: systemImage)
-                .frame(maxWidth: .infinity)
-                .padding()
+                .frame(maxWidth: .infinity).padding()
                 .background(Color.systemTertiaryBackgroundCompat)
                 .cornerRadius(12)
         }
@@ -351,16 +401,14 @@ struct LearnModeView: View {
         HStack(spacing: 12) {
             ForEach(LearnCardEvaluation.allCases, id: \.title) { evaluation in
                 Button {
-                    guard let updatedCard = viewModel.applyEvaluation(evaluation) else { return }
-                    onUpdateCard?(updatedCard)
+                    if let updated = viewModel.applyEvaluation(evaluation) {
+                        onUpdateCard?(updated)
+                    }
                 } label: {
                     Text(evaluation.title)
-                        .font(.subheadline.bold())
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(evaluation.color)
-                        .cornerRadius(12)
+                        .font(.subheadline.bold()).foregroundColor(.white)
+                        .frame(maxWidth: .infinity).padding(.vertical, 12)
+                        .background(evaluation.color).cornerRadius(12)
                 }
             }
         }
@@ -370,34 +418,26 @@ struct LearnModeView: View {
 
     private var navigationButtons: some View {
         HStack(spacing: 20) {
-            Button(action: { viewModel.previousCard() }) {
+            Button { viewModel.previousCard() } label: {
                 HStack {
-                    Image(systemName: "chevron.left")
-                    Text("前へ")
+                    Image(systemName: "chevron.left"); Text("前へ")
                 }
-                .frame(maxWidth: .infinity)
-                .padding()
+                .frame(maxWidth: .infinity).padding()
                 .background(Color.systemTertiaryBackgroundCompat)
                 .foregroundColor(viewModel.isFirstCard ? .gray : .primary)
                 .cornerRadius(10)
             }
             .disabled(viewModel.isFirstCard)
 
-            Button(action: {
-                if viewModel.isLastCard {
-                    viewModel.sessionCompleted = true
-                } else {
-                    viewModel.nextCard()
-                }
-            }) {
+            Button {
+                if viewModel.isLastCard { viewModel.sessionCompleted = true }
+                else { viewModel.nextCard() }
+            } label: {
                 HStack {
                     Text(viewModel.isLastCard ? "完了" : "次へ")
-                    if !viewModel.isLastCard {
-                        Image(systemName: "chevron.right")
-                    }
+                    if !viewModel.isLastCard { Image(systemName: "chevron.right") }
                 }
-                .frame(maxWidth: .infinity)
-                .padding()
+                .frame(maxWidth: .infinity).padding()
                 .background(viewModel.isLastCard ? Color.green : Color.systemTertiaryBackgroundCompat)
                 .foregroundColor(viewModel.isLastCard ? .white : .primary)
                 .cornerRadius(10)
@@ -410,57 +450,43 @@ struct LearnModeView: View {
     private var completionView: some View {
         VStack(spacing: 20) {
             Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 64))
-                .foregroundColor(.green)
-
-            Text("今回の学習が終わりました")
-                .font(.title3.bold())
-
-            Button("もう一度出題する") {
-                viewModel.resetSession(with: cards)
-            }
-            .buttonStyle(.borderedProminent)
-
-            Button("閉じる") {
-                dismiss()
-            }
+                .font(.system(size: 64)).foregroundColor(.green)
+            Text("今回の学習が終わりました").font(.title3.bold())
+            Button("もう一度") { viewModel.resetSession(with: cards); step = .settings }
+                .buttonStyle(.borderedProminent)
+            Button("閉じる") { dismiss() }
         }
     }
 
     private var emptyStateView: some View {
         VStack(spacing: 20) {
             Image(systemName: "square.stack.3d.up.slash")
-                .font(.system(size: 60))
-                .foregroundColor(.secondary)
-
-            Text("学習するカードがありません")
-                .font(.headline)
-
-            Button("閉じる") {
-                dismiss()
-            }
-            .buttonStyle(.borderedProminent)
+                .font(.system(size: 60)).foregroundColor(.secondary)
+            Text("学習するカードがありません").font(.headline)
+            Button("閉じる") { dismiss() }.buttonStyle(.borderedProminent)
         }
     }
 
     private func statusColor(for status: LearningStatus) -> Color {
         switch status {
-        case .new:
-            return .blue
-        case .notSure:
-            return .orange
-        case .reviewing:
-            return .purple
-        case .mastered:
-            return .green
+        case .new: return .blue
+        case .notSure: return .orange
+        case .reviewing: return .purple
+        case .mastered: return .green
         }
     }
+}
+
+// MARK: - モード enum
+
+enum LearnPracticeMode {
+    case flashcard
+    case conversation
 }
 
 #Preview {
     LearnModeView(cards: [
         WordCard(collectionId: UUID(), japanese: "おはよう", english: "Good morning"),
         WordCard(collectionId: UUID(), japanese: "ありがとう", english: "Thank you"),
-        WordCard(collectionId: UUID(), japanese: "さようなら", english: "Goodbye")
     ])
 }
