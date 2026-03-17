@@ -23,6 +23,8 @@ final class AIChatViewModel: ObservableObject {
     - フレーズの使い方、ニュアンスの違い、自然な表現の提案など何でもOKです
     - 例文は英語で示し、その日本語訳も添えてください
     - 丁寧でわかりやすい説明を心がけてください
+    - マークダウン記号（*, **, #, ~~, _ など）は絶対に使わないでください
+    - プレーンテキストのみで回答してください
     """
 
     func send() {
@@ -58,14 +60,17 @@ final class AIChatViewModel: ObservableObject {
                 }
                 let response = try await lmSession.respond(to: userMessage)
 
-                // respond(to:) は iOS 26+ では String を直接返す
-                let text: String
+                // respond(to:) の戻り値を文字列として取り出す
+                // iOS 26+ では GeneratedContent 型で、description に本文が入っている
+                let raw: String
                 if let str = response as? String {
-                    text = str
+                    raw = str
                 } else {
-                    // フォールバック: description から rawContent を除いたテキストを取得
-                    text = extractContent(from: String(describing: response))
+                    raw = String(describing: response)
                 }
+
+                // マークダウン記号を除去してクリーンなテキストにする
+                let text = cleanMarkdown(raw)
 
                 messages.append(ChatMessage(role: .assistant, text: text))
                 isLoading = false
@@ -81,18 +86,43 @@ final class AIChatViewModel: ObservableObject {
         errorMessage = "Apple Intelligence が利用できません（iOS 18.2以降の対応デバイスが必要です）"
     }
 
-    /// LanguageModelSession のレスポンス文字列からテキスト部分を抽出
-    private func extractContent(from raw: String) -> String {
-        // rawContent: "..." パターン
-        if let range = raw.range(of: #"rawContent: \"(.*?)\""#, options: .regularExpression) {
-            let seg = String(raw[range])
-            let prefix = "rawContent: \""
-            if seg.hasPrefix(prefix) && seg.hasSuffix("\"") {
-                return String(seg.dropFirst(prefix.count).dropLast())
-                    .replacingOccurrences(of: "\\n", with: "\n")
-            }
+    /// マークダウン記号を除去してプレーンテキストにする
+    private func cleanMarkdown(_ input: String) -> String {
+        var text = input
+
+        // \n リテラル文字列を実際の改行に変換
+        text = text.replacingOccurrences(of: "\\n", with: "\n")
+
+        // **太字** → 太字
+        text = text.replacingOccurrences(of: "**", with: "")
+        // *斜体* → 斜体（ただし I'm などのアポストロフィは保持）
+        // 行頭の * だけ除去（箇条書き）
+        let lines = text.components(separatedBy: .newlines).map { line -> String in
+            var l = line.trimmingCharacters(in: .whitespaces)
+            // 行頭の "* " や "- " を除去
+            if l.hasPrefix("* ") { l = String(l.dropFirst(2)) }
+            else if l.hasPrefix("- ") { l = String(l.dropFirst(2)) }
+            else if l.hasPrefix("• ") { l = String(l.dropFirst(2)) }
+            // 行頭の "# " "## " 等を除去
+            while l.hasPrefix("#") { l = String(l.dropFirst()) }
+            l = l.trimmingCharacters(in: .whitespaces)
+            return l
         }
-        return raw.replacingOccurrences(of: "\\n", with: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        text = lines.joined(separator: "\n")
+
+        // ~~打ち消し~~ を除去
+        text = text.replacingOccurrences(of: "~~", with: "")
+        // `コード` を除去
+        text = text.replacingOccurrences(of: "`", with: "")
+        // __太字__ を除去
+        text = text.replacingOccurrences(of: "__", with: "")
+
+        // 連続する空行を1つにまとめる
+        while text.contains("\n\n\n") {
+            text = text.replacingOccurrences(of: "\n\n\n", with: "\n\n")
+        }
+
+        return text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 
