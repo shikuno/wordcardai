@@ -1,30 +1,21 @@
-// ConversationTurn.swift
-// 会話練習1ターン分のデータ
+// ConversationScene.swift
+// 1問分の会話シーン（1枚のカード = 1シーン）
 
 import Foundation
 
-/// 会話練習1ターン分
-struct ConversationTurn: Identifiable {
+/// 1問分の会話シーン
+/// 流れ: 相手のセリフA → 自分（カードの英語） → 相手の続きB
+struct ConversationScene: Identifiable {
     let id = UUID()
+    let card: WordCard
 
-    /// 相手のセリフ（英語）
-    let partnerEnglish: String
-    /// 相手のセリフ（日本語訳）
-    let partnerJapanese: String
+    /// 相手の最初のセリフ（英語）
+    let partnerOpeningEnglish: String
+    /// 相手の最初のセリフ（日本語）
+    let partnerOpeningJapanese: String
 
-    /// 自分の返答ヒント（日本語）
-    let myHintJapanese: String
-    /// 自分の返答（英語・正解）
-    let myEnglish: String
-
-    /// 使用しているカードのID（複数可）
-    let usedCardIDs: [UUID]
-}
-
-/// 会話練習セッション全体
-struct ConversationSession: Identifiable {
-    let id = UUID()
-    let collectionTitle: String
-    let turns: [ConversationTurn]
-    let createdAt: Date = .now
+    /// 相手の続きのセリフ（英語）- 自分の返答を受けて
+    let partnerReplyEnglish: String
+    /// 相手の続きのセリフ（日本語）
+    let partnerReplyJapanese: String
 }

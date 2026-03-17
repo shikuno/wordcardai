@@ -17,7 +17,6 @@ struct CollectionCardView: View {
     @State private var showingList = false
     @State private var showingCreateCard = false
     @State private var showingLearnMode = false
-    @State private var showingConversation = false
     @GestureState private var dragOffset: CGFloat = 0
     @State private var showFlipHint = false
     @State private var editingCard: WordCard?
@@ -122,12 +121,6 @@ struct CollectionCardView: View {
             LearnModeView(cards: cardsViewModel.cards(for: collection.id)) { updatedCard in
                 cardsViewModel.replaceCard(updatedCard)
             }
-        }
-        .sheet(isPresented: $showingConversation) {
-            ConversationView(
-                cards: cardsViewModel.cards(for: collection.id),
-                collectionTitle: collection.title
-            )
         }
         .sheet(item: $editingCard, onDismiss: refreshCards) { card in
             CreateEditCardView(
@@ -324,19 +317,6 @@ struct CollectionCardView: View {
             }
             .buttonStyle(.bordered)
 
-            Button {
-                showingConversation = true
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "bubble.left.and.bubble.right.fill")
-                    Text("会話練習")
-                        .fontWeight(.semibold)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 13)
-            }
-            .buttonStyle(.bordered)
-            .tint(.green)
         }
     }
 

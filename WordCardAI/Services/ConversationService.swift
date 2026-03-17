@@ -1,5 +1,5 @@
 // ConversationService.swift
-// 1カード → 1ターン の会話を個別生成する（JSON配列なし・シンプル設計）
+// 1枚のカード → 1つの会話シーンを生成
 
 import Foundation
 #if canImport(FoundationModels)
@@ -8,68 +8,54 @@ import FoundationModels
 
 @MainActor
 final class ConversationService {
-
     static let shared = ConversationService()
     private init() {}
 
-    // MARK: - Public
-
-    /// カード群から会話セッションを生成する（1カード = 1ターン を順番に生成）
-    func generateSession(cards: [WordCard], turnCount: Int) async throws -> ConversationSession {
-        guard !cards.isEmpty else { throw ConversationError.noCards }
-
-        let selected = Array(cards.shuffled().prefix(min(turnCount, cards.count)))
-        var turns: [ConversationTurn] = []
-
-        for card in selected {
-            let turn = try await generateOneTurn(card: card)
-            turns.append(turn)
-        }
-        return ConversationSession(collectionTitle: "", turns: turns)
-    }
-
-    // MARK: - Private: 1カード → 1ターン
-
-    private func generateOneTurn(card: WordCard) async throws -> ConversationTurn {
+    /// 1枚のカードから会話シーンを1つ生成する
+    func generateScene(for card: WordCard) async throws -> ConversationScene {
         let prompt = """
-        Create a short, natural English conversation exchange.
-        Speaker B must say EXACTLY this phrase: "\(card.english)"
-        That phrase comes from this Japanese sentence: "\(card.japanese)"
+        Create a short, natural 3-line English conversation.
+        The middle line (Speaker B) must be EXACTLY: "\(card.english)"
 
-        Output 4 lines in this exact format (no labels, no JSON, no extra text):
-        LINE1: Speaker A's English sentence (leads B to naturally say the phrase)
-        LINE2: Japanese translation of Speaker A's line
-        LINE3: Japanese translation of Speaker B's reply (= "\(card.japanese)")
-        LINE4: Speaker B's English reply (= "\(card.english)" used naturally)
+        Output exactly 4 lines in this order (no labels, no numbers, no JSON):
+        Line 1: Speaker A's opening sentence in English
+        Line 2: Japanese translation of Line 1
+        Line 3: Speaker A's reply after hearing "\(card.english)", in English
+        Line 4: Japanese translation of Line 3
 
-        Example output:
+        Rules:
+        - Keep all lines short (1 sentence each)
+        - Make it natural daily conversation
+        - Do NOT include Speaker B's line in the output
+
+        Example for "Not bad, I guess.":
         How are you feeling today?
         今日の調子はどう？
-        まあまあかな。
-        Not bad, I guess.
-
-        Now output 4 lines only:
+        That's good to hear!
+        それは良かった！
         """
 
         let raw = try await callFoundationModels(prompt: prompt)
-        return try parseLines(raw: raw, card: card)
+        return try parseScene(raw: raw, card: card)
     }
+
+    // MARK: - Private
 
     private func callFoundationModels(prompt: String) async throws -> String {
         #if canImport(FoundationModels)
         if #available(iOS 18.2, *) {
             let session = LanguageModelSession(
-                instructions: "You are an English conversation writer. Output plain text only. No JSON, no markdown, no labels."
+                instructions: "Output plain text only. Exactly 4 lines. No labels, no JSON, no markdown."
             )
             let response = try await session.respond(to: prompt)
             let raw = (response as? CustomStringConvertible)?.description ?? String(describing: response)
 
             // rawContent: "..." を取り出す
             if let range = raw.range(of: #"rawContent: \"(.*?)\""#, options: .regularExpression) {
-                let segment = String(raw[range])
+                let seg = String(raw[range])
                 let prefix = "rawContent: \""
-                if segment.hasPrefix(prefix) && segment.hasSuffix("\"") {
-                    return String(segment.dropFirst(prefix.count).dropLast())
+                if seg.hasPrefix(prefix) && seg.hasSuffix("\"") {
+                    return String(seg.dropFirst(prefix.count).dropLast())
                         .replacingOccurrences(of: "\\n", with: "\n")
                 }
             }
@@ -79,23 +65,22 @@ final class ConversationService {
         throw ConversationError.notAvailable
     }
 
-    /// 4行テキストをパースして ConversationTurn を作る
-    private func parseLines(raw: String, card: WordCard) throws -> ConversationTurn {
+    private func parseScene(raw: String, card: WordCard) throws -> ConversationScene {
         let lines = raw
             .components(separatedBy: .newlines)
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
 
         guard lines.count >= 4 else {
-            throw ConversationError.parseError("4行取れませんでした(\(lines.count)行): \(raw.prefix(200))")
+            throw ConversationError.parseError("4行取れませんでした(\(lines.count)行)")
         }
 
-        return ConversationTurn(
-            partnerEnglish: lines[0],
-            partnerJapanese: lines[1],
-            myHintJapanese: lines[2],
-            myEnglish: lines[3],
-            usedCardIDs: [card.id]
+        return ConversationScene(
+            card: card,
+            partnerOpeningEnglish: lines[0],
+            partnerOpeningJapanese: lines[1],
+            partnerReplyEnglish: lines[2],
+            partnerReplyJapanese: lines[3]
         )
     }
 }
@@ -103,15 +88,15 @@ final class ConversationService {
 // MARK: - Errors
 
 enum ConversationError: LocalizedError {
-    case noCards
     case notAvailable
     case parseError(String)
 
     var errorDescription: String? {
         switch self {
-        case .noCards: return "カードがありません"
-        case .notAvailable: return "Apple Intelligence が利用できません（iOS 18.2以降のApple Intelligence対応デバイスが必要です）"
-        case .parseError(let msg): return "会話の生成に失敗しました: \(msg)"
+        case .notAvailable:
+            return "Apple Intelligence が利用できません（iOS 18.2以降の対応デバイスが必要です）"
+        case .parseError(let msg):
+            return "会話の生成に失敗しました: \(msg)"
         }
     }
 }
