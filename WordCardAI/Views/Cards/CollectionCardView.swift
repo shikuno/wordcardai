@@ -253,7 +253,7 @@ struct CollectionCardView: View {
             ? !playbackViewModel.isShowingBack
             :  playbackViewModel.isShowingBack)
 
-        return ZStack(alignment: .topTrailing) {
+        return ZStack {
             RoundedRectangle(cornerRadius: 18)
                 .fill(Color(uiColor: .secondarySystemBackground))
                 .shadow(color: .black.opacity(0.08), radius: 8, y: 3)
@@ -262,14 +262,12 @@ struct CollectionCardView: View {
             VStack(spacing: 0) {
                 Spacer()
                 if showingBack {
-                    // 裏面：英語メイン（白・表面と同じスタイル）
                     adaptiveText(card.english, maxLength: 60)
                         .foregroundColor(.primary)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 24)
                         .opacity(isCurrent ? 1.0 : 0.4)
                 } else {
-                    // 表面：日本語
                     adaptiveText(card.japanese, maxLength: 60)
                         .foregroundColor(.primary)
                         .multilineTextAlignment(.center)
@@ -278,8 +276,20 @@ struct CollectionCardView: View {
                 }
                 Spacer()
             }
-
-            // ── 編集ボタン（現在カードのみ・右上） ──
+        }
+        // ── ステータスバッジ（左上）・編集ボタン（右上）をoverlay ──
+        .overlay(alignment: .topLeading) {
+            if isCurrent {
+                Text(card.learningStatus.displayName)
+                    .font(.caption.weight(.semibold))
+                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .background(statusColor(card.learningStatus).opacity(0.12))
+                    .foregroundColor(statusColor(card.learningStatus))
+                    .clipShape(Capsule())
+                    .padding(14)
+            }
+        }
+        .overlay(alignment: .topTrailing) {
             if isCurrent {
                 Button { editingCard = card } label: {
                     Image(systemName: "pencil")
@@ -290,22 +300,6 @@ struct CollectionCardView: View {
                         .clipShape(Circle())
                 }
                 .padding(12)
-            }
-
-            // ── ステータスバッジ（左上） ──
-            VStack {
-                HStack {
-                    Text(card.learningStatus.displayName)
-                        .font(.caption.weight(.semibold))
-                        .padding(.horizontal, 8).padding(.vertical, 4)
-                        .background(statusColor(card.learningStatus).opacity(0.12))
-                        .foregroundColor(statusColor(card.learningStatus))
-                        .clipShape(Capsule())
-                    Spacer()
-                }
-                .padding(.horizontal, 14).padding(.top, 14)
-                .opacity(isCurrent ? 1.0 : 0.0)
-                Spacer()
             }
         }
         .contentShape(Rectangle())
