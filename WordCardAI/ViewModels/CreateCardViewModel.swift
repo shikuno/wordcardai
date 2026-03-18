@@ -19,6 +19,7 @@ class CreateCardViewModel: ObservableObject {
     @Published var selectedCandidateIndex: Int?
     @Published var isGenerating: Bool = false
     @Published var errorMessage: String?
+    @Published var rawAIOutput: String? = nil   // デバッグ用：AI生出力
     
     private let translationService: TranslationServiceProtocol
     private let candidateCount: Int
@@ -59,6 +60,8 @@ class CreateCardViewModel: ObservableObject {
         
         do {
             candidates = try await translationService.generateCandidates(from: japanese, count: candidateCount)
+            // デバッグ用：生出力を取得
+            rawAIOutput = FoundationModelsTranslationService.lastRawOutput
             
             if !candidates.isEmpty {
                 selectCandidate(at: 0)

@@ -20,7 +20,8 @@ struct CollectionCardView: View {
     @GestureState private var dragOffset: CGFloat = 0
     @State private var showFlipHint = false
     @State private var editingCard: WordCard?
-    @State private var showBackFirst = false  // 裏から表示
+    @State private var showBackFirst = false
+    @State private var showingDisplaySettings = false
 
     init(collection: CardCollection, cardsViewModel: CardsViewModel, collectionsViewModel: CollectionsViewModel) {
         self.collection = collection
@@ -74,6 +75,11 @@ struct CollectionCardView: View {
                     showingList = true
                 } label: {
                     Image(systemName: "slider.horizontal.3")
+                }
+                Button {
+                    showingDisplaySettings = true
+                } label: {
+                    Image(systemName: "eye")
                 }
             }
         }
@@ -131,6 +137,14 @@ struct CollectionCardView: View {
                 card: card
             )
         }
+        .sheet(isPresented: $showingDisplaySettings) {
+            DisplaySettingsSheet(
+                showBackFirst: $showBackFirst,
+                cards: playbackViewModel.cards,
+                currentIndex: $playbackViewModel.currentIndex
+            )
+            .presentationDetents([.medium])
+        }
     }
 
     // MARK: - Header
@@ -154,11 +168,6 @@ struct CollectionCardView: View {
                     .foregroundColor(.secondary)
             }
 
-            Toggle("裏から表示", isOn: $showBackFirst)
-                .font(.caption)
-                .toggleStyle(.button)
-                .tint(.orange)
-                .padding(.top, 4)
             // 下段：ジャンプスライダー（10枚以上のとき表示）
             if playbackViewModel.cards.count >= 10 {
                 cardJumpSlider
@@ -238,30 +247,29 @@ struct CollectionCardView: View {
 
     // 1枚のカードセル
     private func cardCell(card: WordCard, idx: Int, cardWidth: CGFloat, isCurrent: Bool) -> some View {
-        let showingBack = isCurrent && (showBackFirst ? !playbackViewModel.isShowingBack : playbackViewModel.isShowingBack)
+        let showingBack = isCurrent && (showBackFirst
+            ? !playbackViewModel.isShowingBack
+            :  playbackViewModel.isShowingBack)
 
-        return ZStack(alignment: .bottomTrailing) {
+        return ZStack {
             RoundedRectangle(cornerRadius: 18)
                 .fill(Color(uiColor: .secondarySystemBackground))
                 .shadow(color: .black.opacity(0.08), radius: 8, y: 3)
 
-            VStack(spacing: 16) {
-                Spacer()
-
+            // テキスト：カード中央固定
+            VStack(spacing: 12) {
                 if showingBack {
                     Text(card.english)
                         .font(.title.bold())
                         .foregroundColor(.primary)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 24)
-                        .transition(.opacity.combined(with: .move(edge: .bottom)))
                     Divider().padding(.horizontal, 40)
                     Text(card.japanese)
                         .font(.title3)
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 24)
-                        .transition(.opacity.combined(with: .move(edge: .top)))
                 } else {
                     Text(card.japanese)
                         .font(.title.bold())
@@ -269,41 +277,36 @@ struct CollectionCardView: View {
                         .padding(.horizontal, 24)
                         .opacity(isCurrent ? 1.0 : 0.35)
                 }
-
-                Spacer()
-
-                if isCurrent && showFlipHint {
-                    Text("タップで裏返す")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .padding(.bottom, 12)
-                        .transition(.opacity)
-                }
             }
-            .contentShape(Rectangle())
-            .onTapGesture {
-                guard isCurrent else { return }
-                withAnimation(.easeInOut(duration: 0.22)) {
-                    playbackViewModel.toggleSide()
-                    if showFlipHint {
-                        showFlipHint = false
-                        settingsService.updateHasSeenCardFlipHint(true)
+
+            // 編集ボタン：右下（現在カードのみ・カードと同時にスライド）
+            if isCurrent {
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        Button { editingCard = card } label: {
+                            Image(systemName: "pencil")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(.secondary)
+                                .padding(8)
+                                .background(Color(uiColor: .tertiarySystemBackground))
+                                .clipShape(Circle())
+                        }
+                        .padding(12)
                     }
                 }
             }
-
-            if isCurrent {
-                Button {
-                    editingCard = card
-                } label: {
-                    Image(systemName: "pencil")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(.secondary)
-                        .padding(8)
-                        .background(Color(uiColor: .tertiarySystemBackground))
-                        .clipShape(Circle())
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            guard isCurrent else { return }
+            withAnimation(.easeInOut(duration: 0.22)) {
+                playbackViewModel.toggleSide()
+                if showFlipHint {
+                    showFlipHint = false
+                    settingsService.updateHasSeenCardFlipHint(true)
                 }
-                .padding(12)
             }
         }
         .frame(width: cardWidth, height: 290)

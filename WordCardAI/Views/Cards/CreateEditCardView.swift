@@ -133,12 +133,27 @@ struct CreateEditCardView: View {
         }
     }
 
+    @State private var debugTapCount = 0
+    @State private var showDebugAlert = false
+
     @ViewBuilder
     private var candidatesSection: some View {
         if !viewModel.candidates.isEmpty {
             Section {
                 ForEach(Array(viewModel.candidates.enumerated()), id: \.offset) { index, candidate in
-                    Button(action: { viewModel.selectCandidate(at: index) }) {
+                    Button(action: {
+                        viewModel.selectCandidate(at: index)
+                        // 2番目（index==1）を10回連続タップでデバッグ表示
+                        if index == 1 {
+                            debugTapCount += 1
+                            if debugTapCount >= 10 {
+                                debugTapCount = 0
+                                showDebugAlert = true
+                            }
+                        } else {
+                            debugTapCount = 0
+                        }
+                    }) {
                         HStack {
                             Text(candidate)
                                 .foregroundColor(.primary)
@@ -155,6 +170,14 @@ struct CreateEditCardView: View {
                 }
             } header: {
                 Text("AI候補")
+            }
+            .alert("AI生出力（デバッグ）", isPresented: $showDebugAlert) {
+                Button("コピー") {
+                    UIPasteboard.general.string = viewModel.rawAIOutput ?? "(なし)"
+                }
+                Button("閉じる", role: .cancel) {}
+            } message: {
+                Text(viewModel.rawAIOutput ?? "(まだ生成していません)")
             }
         }
     }
