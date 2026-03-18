@@ -86,7 +86,7 @@
 				};
 			};
 			buildConfigurationList = FA5C9FA42ED323AE0044281D /* Build configuration list for PBXProject "WordCardAI" */;
-			developmentRegion = en;
+			developmentRegion = ja;
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
@@ -252,6 +252,10 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "スマート単語カード";
+				INFOPLIST_KEY_CFBundleDevelopmentRegion = ja;
+				DEVELOPMENT_LANGUAGE = ja;
+				INFOPLIST_KEY_CFBundleDevelopmentRegion = ja;
+				DEVELOPMENT_LANGUAGE = ja;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -297,6 +301,10 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "スマート単語カード";
+				INFOPLIST_KEY_CFBundleDevelopmentRegion = ja;
+				DEVELOPMENT_LANGUAGE = ja;
+				INFOPLIST_KEY_CFBundleDevelopmentRegion = ja;
+				DEVELOPMENT_LANGUAGE = ja;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;

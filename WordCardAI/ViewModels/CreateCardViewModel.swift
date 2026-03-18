@@ -60,8 +60,17 @@ class CreateCardViewModel: ObservableObject {
         
         do {
             candidates = try await translationService.generateCandidates(from: japanese, count: candidateCount)
-            // デバッグ用：生出力を取得
-            rawAIOutput = FoundationModelsTranslationService.lastRawOutput
+            // デバッグ用：入力・プロンプト・生出力をまとめて保存
+            rawAIOutput = """
+            【入力（正規化後）】
+            \(FoundationModelsTranslationService.lastRawInput)
+
+            【プロンプト】
+            \(FoundationModelsTranslationService.lastPrompt)
+
+            【AI生出力（無加工）】
+            \(FoundationModelsTranslationService.lastRawOutput)
+            """
             
             if !candidates.isEmpty {
                 selectCandidate(at: 0)

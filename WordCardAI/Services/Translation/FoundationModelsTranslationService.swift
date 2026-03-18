@@ -5,7 +5,9 @@ import FoundationModels
 
 class FoundationModelsTranslationService: TranslationServiceProtocol {
 
-    /// デバッグ用：最後のAI生出力を保持
+    /// デバッグ用：最後の入力・プロンプト・生出力を保持
+    static var lastRawInput: String = "(まだ生成していません)"
+    static var lastPrompt: String = "(まだ生成していません)"
     static var lastRawOutput: String = "(まだ生成していません)"
     
     func generateCandidates(from japanese: String, count: Int) async throws -> [String] {
@@ -23,6 +25,10 @@ class FoundationModelsTranslationService: TranslationServiceProtocol {
         Write only the \(count) sentences, one per line, nothing else.
         Japanese: \(trimmed)
         """
+
+        // デバッグ用：入力とプロンプトを保存
+        FoundationModelsTranslationService.lastRawInput = trimmed
+        FoundationModelsTranslationService.lastPrompt = prompt
         
         #if canImport(FoundationModels)
         if #available(iOS 18.2, *) {
@@ -32,7 +38,7 @@ class FoundationModelsTranslationService: TranslationServiceProtocol {
                 )
                 let response = try await session.respond(to: prompt)
                 let text = response.content
-                // デバッグ用：生出力を保存
+                // デバッグ用：生出力をそのまま保存（加工なし）
                 FoundationModelsTranslationService.lastRawOutput = text
                 
                 // 改行で分割してそのまま返す

@@ -17,9 +17,7 @@ struct CollectionCardView: View {
     @State private var showingList = false
     @State private var showingCreateCard = false
     @State private var showingLearnMode = false
-    @State private var showingDisplaySettings = false
-    @State private var showBackFirst = false
-    @State private var filterStatuses: Set<LearningStatus> = Set(LearningStatus.allCases)
+    @State private var showingConversation = false
     @GestureState private var dragOffset: CGFloat = 0
     @State private var showFlipHint = false
     @State private var editingCard: WordCard?
@@ -182,19 +180,9 @@ struct CollectionCardView: View {
             }
         )
 
-        return VStack(spacing: 2) {
-            Slider(value: sliderBinding, in: 0...Double(total - 1), step: 1)
-                .tint(.blue)
-            HStack {
-                Text("1枚目")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-                Spacer()
-                Text("\(total)枚目")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-            }
-        }
+        return Slider(value: sliderBinding, in: 0...Double(total - 1), step: 1)
+            .tint(Color.secondary.opacity(0.5))
+            .scaleEffect(x: 1, y: 0.6)  // トラックを細く見せる
     }
 
     // MARK: - Card Carousel
