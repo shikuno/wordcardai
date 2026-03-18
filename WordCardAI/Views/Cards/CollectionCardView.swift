@@ -319,15 +319,21 @@ struct CollectionCardView: View {
     /// 文字数に応じてフォントサイズを自動調整するText
     @ViewBuilder
     private func adaptiveText(_ text: String, maxLength: Int) -> some View {
-        let len = text.count
-        let font: Font = len <= 20  ? .title.bold()
-                       : len <= 40  ? .title2.bold()
-                       : len <= 80  ? .title3.bold()
-                       :              .body.bold()
-        Text(text)
+        // 改行を半角スペースに正規化（AIが \n を混入させることがあるため）
+        let normalized = text
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        let len = normalized.count
+        let font: Font = len <= 20 ? .title.bold()
+                       : len <= 40 ? .title2.bold()
+                       : len <= 80 ? .title3.bold()
+                       :             .body.bold()
+        Text(normalized)
             .font(font)
-            .lineLimit(nil)
-            .fixedSize(horizontal: false, vertical: true)
+            .lineLimit(4)
+            .minimumScaleFactor(0.6)
     }
 
     private func statusColor(_ status: LearningStatus) -> Color {
@@ -409,13 +415,12 @@ struct CollectionCardView: View {
             }
 
             // タイミング（2列グリッドピッカー）
-            // 表→裏 と 裏→次カード を横並びで表示
             let timingSteps: [Double] = [0, 0.5, 1, 1.5, 2, 3, 5]
 
             HStack(alignment: .top, spacing: 12) {
-                // 表→裏の間隔
+                // 表裏切替の間隔
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("裏返すまで")
+                    Text("表裏の切替まで")
                         .font(.caption)
                         .foregroundColor(.secondary)
                     Menu {
