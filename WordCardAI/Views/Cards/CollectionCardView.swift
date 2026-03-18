@@ -20,6 +20,7 @@ struct CollectionCardView: View {
     @GestureState private var dragOffset: CGFloat = 0
     @State private var showFlipHint = false
     @State private var editingCard: WordCard?
+    @State private var showBackFirst = false  // 裏から表示
 
     init(collection: CardCollection, cardsViewModel: CardsViewModel, collectionsViewModel: CollectionsViewModel) {
         self.collection = collection
@@ -144,7 +145,7 @@ struct CollectionCardView: View {
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
                         .background(Color.blue.opacity(0.1))
-                        .foregroundColor(.blue)
+                        .foregroundColor(.primary)
                         .clipShape(Capsule())
                 }
                 Spacer()
@@ -153,6 +154,11 @@ struct CollectionCardView: View {
                     .foregroundColor(.secondary)
             }
 
+            Toggle("裏から表示", isOn: $showBackFirst)
+                .font(.caption)
+                .toggleStyle(.button)
+                .tint(.orange)
+                .padding(.top, 4)
             // 下段：ジャンプスライダー（10枚以上のとき表示）
             if playbackViewModel.cards.count >= 10 {
                 cardJumpSlider
@@ -232,7 +238,9 @@ struct CollectionCardView: View {
 
     // 1枚のカードセル
     private func cardCell(card: WordCard, idx: Int, cardWidth: CGFloat, isCurrent: Bool) -> some View {
-        ZStack {
+        let showingBack = isCurrent && (showBackFirst ? !playbackViewModel.isShowingBack : playbackViewModel.isShowingBack)
+
+        return ZStack(alignment: .bottomTrailing) {
             RoundedRectangle(cornerRadius: 18)
                 .fill(Color(uiColor: .secondarySystemBackground))
                 .shadow(color: .black.opacity(0.08), radius: 8, y: 3)
@@ -240,22 +248,26 @@ struct CollectionCardView: View {
             VStack(spacing: 16) {
                 Spacer()
 
-                // 表面テキストは常に表示（隣カードも薄く見える）
-                Text(card.japanese)
-                    .font(.title.bold())
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 24)
-                    .opacity(isCurrent ? 1.0 : 0.35)
-
-                // 裏面は現在カードのみ
-                if isCurrent && playbackViewModel.isShowingBack {
-                    Divider().padding(.horizontal, 40)
+                if showingBack {
                     Text(card.english)
-                        .font(.title2)
-                        .foregroundColor(.blue)
+                        .font(.title.bold())
+                        .foregroundColor(.primary)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 24)
                         .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    Divider().padding(.horizontal, 40)
+                    Text(card.japanese)
+                        .font(.title3)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 24)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                } else {
+                    Text(card.japanese)
+                        .font(.title.bold())
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 24)
+                        .opacity(isCurrent ? 1.0 : 0.35)
                 }
 
                 Spacer()
@@ -278,6 +290,20 @@ struct CollectionCardView: View {
                         settingsService.updateHasSeenCardFlipHint(true)
                     }
                 }
+            }
+
+            if isCurrent {
+                Button {
+                    editingCard = card
+                } label: {
+                    Image(systemName: "pencil")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.secondary)
+                        .padding(8)
+                        .background(Color(uiColor: .tertiarySystemBackground))
+                        .clipShape(Circle())
+                }
+                .padding(12)
             }
         }
         .frame(width: cardWidth, height: 290)
