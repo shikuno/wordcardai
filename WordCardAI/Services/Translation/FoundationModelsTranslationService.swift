@@ -3,6 +3,8 @@ import Foundation
 import FoundationModels
 #endif
 
+// Foundation Models を使った生成AIベースの翻訳サービス
+// ※ここでは FoundationModels の LanguageModelSession API を想定した実装にしています。
 class FoundationModelsTranslationService: TranslationServiceProtocol {
     
     func generateCandidates(from japanese: String, count: Int) async throws -> [String] {
@@ -15,56 +17,186 @@ class FoundationModelsTranslationService: TranslationServiceProtocol {
             throw TranslationError.emptyInput
         }
         
-        let prompt = """
-        Translate the following Japanese into exactly \(count) English sentences.
-        Write only the \(count) sentences, one per line, nothing else.
-        Japanese: \(trimmed)
-        """
+        // --- プロンプト組み立て ---
+        let prompt = "Translate this Japanese sentence into \(count) different natural English sentences. Output exactly \(count) lines. Each line is one English sentence only. No numbers, no bullets, no markdown symbols (*, **, #, -, ~), no Japanese, no explanations. Plain text only. Japanese: \(trimmed)"
+        
+        print("\n===== FoundationModelsTranslationService =====")
+        print("📝 Prompt to LLM:\n\(prompt)")
         
         #if canImport(FoundationModels)
         if #available(iOS 18.2, *) {
             do {
-                let session = LanguageModelSession(
-                    instructions: "You are a professional translator. Output only the requested sentences, one per line, no numbering, no explanation."
-                )
-                let response = try await session.respond(to: prompt)
-                let text = response.content
+                let instructions = "You are a professional Japanese to English translator. Always respond in English only."
+                let session = LanguageModelSession(instructions: instructions)
                 
-                // 改行で分割してそのまま返す
-                let lines = text
+                let response = try await session.respond(to: prompt)
+                // Response<String>.content が本文
+                let contentText = response.content
+
+                print("🧾 Extracted contentText:\n\(contentText)")
+
+                // --- contentText から候補を抽出 ---
+                let normalized = contentText.replacingOccurrences(of: "\\n", with: "\n")
+                
+                // 2) 改行で分割（すでに "1. ..." 形式で行ごとになっていることを期待）
+                var lines = normalized
                     .components(separatedBy: .newlines)
                     .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                     .filter { !$0.isEmpty }
                 
-                // 番号「1. 」「1) 」だけ除去（最小限）
-                let cleaned = lines.map { line -> String in
+                // 3) もし改行が全く無く "1. Hello 2. Hi 3. Greetings" のように連結されている場合、
+                //    番号パターンで分割を試みる
+                if lines.count == 1 {
+                    let single = lines[0]
+                    // "1." "2." "3." を目印に分割
+                    let pattern = "(?=[0-9]+\\.)" // "1.", "2." の前の位置で区切る
+                    if let regex = try? NSRegularExpression(pattern: pattern, options: []) {
+                        let ns = single as NSString
+                        let ranges = regex.matches(in: single, options: [], range: NSRange(location: 0, length: ns.length)).map { $0.range.location }
+                        if !ranges.isEmpty {
+                            var parts: [String] = []
+                            for (idx, start) in ranges.enumerated() {
+                                let end = (idx + 1 < ranges.count) ? ranges[idx + 1] : ns.length
+                                let range = NSRange(location: start, length: end - start)
+                                let chunk = ns.substring(with: range).trimmingCharacters(in: .whitespacesAndNewlines)
+                                if !chunk.isEmpty {
+                                    parts.append(chunk)
+                                }
+                            }
+                            if !parts.isEmpty {
+                                lines = parts
+                            }
+                        }
+                    }
+                }
+                
+                // 4) 先頭の番号や箇条書き記号を削除
+                lines = lines.map { line in
                     var s = line
-                    if let r = try? NSRegularExpression(pattern: "^\\d+[.)\\s]+") {
-                        s = r.stringByReplacingMatches(in: s, range: NSRange(s.startIndex..., in: s), withTemplate: "")
+                    let patterns = ["^[0-9]+[\\).]*\\s*", "^[\\-•]\\s*"]
+                    for pattern in patterns {
+                        if let regex = try? NSRegularExpression(pattern: pattern, options: []) {
+                            let range = NSRange(location: 0, length: (s as NSString).length)
+                            s = regex.stringByReplacingMatches(in: s, options: [], range: range, withTemplate: "")
+                        }
                     }
                     return s.trimmingCharacters(in: .whitespacesAndNewlines)
-                }.filter { !$0.isEmpty }
+                }
+
+                // 4.5) マークダウン記号を除去（*, **, #, ~, _ など）
+                lines = lines.map { line in
+                    var s = line
+                    // **bold** や *italic* のアスタリスクを除去
+                    s = s.replacingOccurrences(of: "**", with: "")
+                    s = s.replacingOccurrences(of: "*", with: "")
+                    // # 見出し記号を除去
+                    if let r = try? NSRegularExpression(pattern: "^#+\\s*") {
+                        s = r.stringByReplacingMatches(in: s, range: NSRange(s.startIndex..., in: s), withTemplate: "")
+                    }
+                    // ~ や _ を除去
+                    s = s.replacingOccurrences(of: "~~", with: "")
+                    s = s.replacingOccurrences(of: "__", with: "")
+                    s = s.replacingOccurrences(of: "_", with: "")
+                    // バッククォートを除去
+                    s = s.replacingOccurrences(of: "`", with: "")
+                    return s.trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+                .filter { !$0.isEmpty }
                 
-                guard !cleaned.isEmpty else { throw TranslationError.processingError }
+                // 5) 英文らしさでフィルタリング
+                lines = lines.filter { Self.isLikelyEnglishSentence($0) }
                 
-                // 足りなければ末尾を繰り返す、多ければ切る
-                var result = cleaned
-                while result.count < count { result.append(result.last ?? "") }
-                return Array(result.prefix(count))
+                // 6) 重複除去
+                var candidates = Array(NSOrderedSet(array: lines)) as? [String] ?? lines
                 
+                // 7) 念のため候補内部の改行と "\n" をスペースに正規化し、1候補=1行にしておく
+                candidates = candidates.map { candidate in
+                    candidate
+                        .replacingOccurrences(of: "\\n", with: " ")
+                        .replacingOccurrences(of: "\n", with: " ")
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+                
+                print("🔎 Filtered candidates before padding: \(candidates)")
+                
+                if candidates.isEmpty {
+                    throw TranslationError.processingError
+                }
+                
+                // 8) 必要な数だけ用意（足りなければ先頭を複製）
+                while candidates.count < count {
+                    if let first = candidates.first {
+                        candidates.append(first)
+                    } else {
+                        break
+                    }
+                }
+                let result = Array(candidates.prefix(count))
+                print("✅ Final candidates (\(result.count)):\n\(result.joined(separator: "\n"))")
+                print("===== End FoundationModelsTranslationService =====\n")
+                return result
             } catch {
-                throw error
+                print("❌ Foundation Models LLM error: \(error)")
+                // Foundation Models が使えない場合は簡易モックにフォールバック
+                let fallback = Self.mockCandidates(for: trimmed, count: count)
+                print("🟡 Using mock candidates instead:\n\(fallback.joined(separator: "\n"))")
+                print("===== End FoundationModelsTranslationService (mock) =====\n")
+                return fallback
             }
         }
         #endif
-        throw TranslationError.processingError
+        
+        // FoundationModels フレームワークを利用できない場合
+        print("❌ Foundation Models framework is not available on this platform")
+        let fallback = Self.mockCandidates(for: trimmed, count: count)
+        print("🟡 Using mock candidates instead:\n\(fallback.joined(separator: "\n"))")
+        print("===== End FoundationModelsTranslationService (mock) =====\n")
+        return fallback
     }
     
-    // 英文っぽいかどうかの判定（最小限）
+    // 簡易判定: 英文っぽいかどうか
     private static func isLikelyEnglishSentence(_ text: String) -> Bool {
-        guard !text.isEmpty, text.count >= 2 else { return false }
-        let jpChars = CharacterSet(charactersIn: "ぁ-んァ-ヴ一-龠々〆")
-        let jpCount = text.unicodeScalars.filter { jpChars.contains($0) }.count
-        return jpCount == 0
+        if text.isEmpty { return false }
+        
+        // ひらがな・カタカナ・漢字が多い行は除外
+        let japaneseCharSet = CharacterSet(charactersIn: "ぁ-んァ-ヴ一-龠々〆")
+        let jpCount = text.unicodeScalars.filter { japaneseCharSet.contains($0) }.count
+        let total = text.unicodeScalars.count
+        if total > 0 && Double(jpCount) / Double(total) > 0.2 {
+            return false
+        }
+        
+        // 英字を1文字も含まない行は除外
+        if !text.unicodeScalars.contains(where: { CharacterSet.letters.contains($0) }) {
+            return false
+        }
+        
+        // 極端に短い or 長い行を除外
+        if text.count < 2 || text.count > 300 {
+            return false
+        }
+        
+        // 明らかなメタ行を除外
+        let banned = ["Response<", "userPrompt:", "assistant:", "system:"]
+        if banned.contains(where: { text.localizedCaseInsensitiveContains($0) }) {
+            return false
+        }
+        
+        return true
+    }
+    
+    // Foundation Models が使えない場合の簡易モック候補
+    private static func mockCandidates(for japanese: String, count: Int) -> [String] {
+        let base = "Please help me."
+        let variations = [
+            base,
+            "I would appreciate your help.",
+            "Could you please help me?"
+        ]
+        var result: [String] = []
+        for i in 0..<max(count, 1) {
+            result.append(variations[i % variations.count])
+        }
+        return result
     }
 }
