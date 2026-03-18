@@ -17,10 +17,12 @@ struct CollectionCardView: View {
     @State private var showingList = false
     @State private var showingCreateCard = false
     @State private var showingLearnMode = false
-    @State private var showingConversation = false
+    @State private var showingDisplaySettings = false
     @GestureState private var dragOffset: CGFloat = 0
     @State private var showFlipHint = false
     @State private var editingCard: WordCard?
+    @State private var showBackFirst = false
+    @State private var filterStatuses: Set<LearningStatus> = Set(LearningStatus.allCases)
 
     init(collection: CardCollection, cardsViewModel: CardsViewModel, collectionsViewModel: CollectionsViewModel) {
         self.collection = collection
@@ -74,6 +76,11 @@ struct CollectionCardView: View {
                     showingList = true
                 } label: {
                     Image(systemName: "slider.horizontal.3")
+                }
+                Button {
+                    showingDisplaySettings = true
+                } label: {
+                    Image(systemName: "line.3.horizontal.decrease.circle")
                 }
             }
         }
@@ -137,6 +144,17 @@ struct CollectionCardView: View {
                 settingsService: settingsService,
                 card: card
             )
+        }
+        .sheet(isPresented: $showingDisplaySettings) {
+            DisplaySettingsSheet(
+                showBackFirst: $showBackFirst,
+                filterStatuses: $filterStatuses,
+                allCards: playbackViewModel.allCards,
+                onApply: { statuses in
+                    playbackViewModel.applyFilter(statuses: statuses)
+                }
+            )
+            .presentationDetents([.medium])
         }
     }
 
@@ -230,55 +248,101 @@ struct CollectionCardView: View {
 
     // 1枚のカードセル
     private func cardCell(card: WordCard, idx: Int, cardWidth: CGFloat, isCurrent: Bool) -> some View {
-        ZStack {
+        // 裏から表示モード：表裏を反転
+        let showingBack = isCurrent && (showBackFirst
+            ? !playbackViewModel.isShowingBack
+            :  playbackViewModel.isShowingBack)
+
+        return ZStack(alignment: .topTrailing) {
             RoundedRectangle(cornerRadius: 18)
                 .fill(Color(uiColor: .secondarySystemBackground))
                 .shadow(color: .black.opacity(0.08), radius: 8, y: 3)
 
-            VStack(spacing: 16) {
+            // ── テキスト中央 ──
+            VStack(spacing: 0) {
                 Spacer()
-
-                // 表面テキストは常に表示（隣カードも薄く見える）
-                Text(card.japanese)
-                    .font(.title.bold())
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 24)
-                    .opacity(isCurrent ? 1.0 : 0.35)
-
-                // 裏面は現在カードのみ
-                if isCurrent && playbackViewModel.isShowingBack {
-                    Divider().padding(.horizontal, 40)
-                    Text(card.english)
-                        .font(.title2)
-                        .foregroundColor(.blue)
+                if showingBack {
+                    // 裏面：英語メイン（白・表面と同じスタイル）
+                    adaptiveText(card.english, maxLength: 60)
+                        .foregroundColor(.primary)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 24)
-                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                        .opacity(isCurrent ? 1.0 : 0.4)
+                } else {
+                    // 表面：日本語
+                    adaptiveText(card.japanese, maxLength: 60)
+                        .foregroundColor(.primary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 24)
+                        .opacity(isCurrent ? 1.0 : 0.4)
                 }
-
                 Spacer()
-
-                if isCurrent && showFlipHint {
-                    Text("タップで裏返す")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .padding(.bottom, 12)
-                        .transition(.opacity)
-                }
             }
-            .contentShape(Rectangle())
-            .onTapGesture {
-                guard isCurrent else { return }
-                withAnimation(.easeInOut(duration: 0.22)) {
-                    playbackViewModel.toggleSide()
-                    if showFlipHint {
-                        showFlipHint = false
-                        settingsService.updateHasSeenCardFlipHint(true)
-                    }
+
+            // ── 編集ボタン（現在カードのみ・右上） ──
+            if isCurrent {
+                Button { editingCard = card } label: {
+                    Image(systemName: "pencil")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.secondary)
+                        .padding(8)
+                        .background(Color(uiColor: .tertiarySystemBackground))
+                        .clipShape(Circle())
+                }
+                .padding(12)
+            }
+
+            // ── ステータスバッジ（左上） ──
+            VStack {
+                HStack {
+                    Text(card.learningStatus.displayName)
+                        .font(.caption.weight(.semibold))
+                        .padding(.horizontal, 8).padding(.vertical, 4)
+                        .background(statusColor(card.learningStatus).opacity(0.12))
+                        .foregroundColor(statusColor(card.learningStatus))
+                        .clipShape(Capsule())
+                    Spacer()
+                }
+                .padding(.horizontal, 14).padding(.top, 14)
+                .opacity(isCurrent ? 1.0 : 0.0)
+                Spacer()
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            guard isCurrent else { return }
+            withAnimation(.easeInOut(duration: 0.22)) {
+                playbackViewModel.toggleSide()
+                if showFlipHint {
+                    showFlipHint = false
+                    settingsService.updateHasSeenCardFlipHint(true)
                 }
             }
         }
         .frame(width: cardWidth, height: 290)
+    }
+
+    /// 文字数に応じてフォントサイズを自動調整するText
+    @ViewBuilder
+    private func adaptiveText(_ text: String, maxLength: Int) -> some View {
+        let len = text.count
+        let font: Font = len <= 20  ? .title.bold()
+                       : len <= 40  ? .title2.bold()
+                       : len <= 80  ? .title3.bold()
+                       :              .body.bold()
+        Text(text)
+            .font(font)
+            .lineLimit(nil)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func statusColor(_ status: LearningStatus) -> Color {
+        switch status {
+        case .new:       return .blue
+        case .notSure:   return .orange
+        case .reviewing: return .purple
+        case .mastered:  return .green
+        }
     }
 
     // MARK: - Playback Controls（再生・学習モードを横並び）
