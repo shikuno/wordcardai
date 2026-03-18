@@ -12,11 +12,14 @@ struct CardsListView: View {
     @ObservedObject var cardsViewModel: CardsViewModel
     @ObservedObject var collectionsViewModel: CollectionsViewModel
     @EnvironmentObject var settingsService: SettingsService
-    
+
+    /// カード選択時のコールバック（nilなら編集画面に遷移）
+    var onSelectCard: ((WordCard) -> Void)? = nil
+
     @State private var showingCreateCard = false
     @State private var showingLearnMode = false
     @State private var editingCard: WordCard?
-    
+
     var body: some View {
         ZStack {
             if cardsViewModel.filteredCards.isEmpty && cardsViewModel.searchText.isEmpty {
@@ -24,7 +27,7 @@ struct CardsListView: View {
             } else {
                 cardsList
             }
-            
+
             VStack {
                 Spacer()
                 HStack {
@@ -72,7 +75,7 @@ struct CardsListView: View {
             }
         }
     }
-    
+
     private var cardsList: some View {
         VStack(spacing: 0) {
             if !cardsViewModel.cards.isEmpty {
@@ -91,10 +94,16 @@ struct CardsListView: View {
                 .padding(.horizontal)
                 .padding(.top, 8)
             }
-            
+
             List {
                 ForEach(cardsViewModel.filteredCards) { card in
-                    Button(action: { editingCard = card }) {
+                    Button(action: {
+                        if let onSelect = onSelectCard {
+                            onSelect(card)
+                        } else {
+                            editingCard = card
+                        }
+                    }) {
                         CardRow(card: card)
                     }
                     .buttonStyle(.plain)
@@ -104,16 +113,16 @@ struct CardsListView: View {
             .listStyle(.plain)
         }
     }
-    
+
     private var emptyStateView: some View {
         VStack(spacing: 20) {
             Image(systemName: "square.stack.3d.up.slash")
                 .font(.system(size: 60))
                 .foregroundColor(.secondary)
-            
+
             Text("カードがありません")
                 .font(.headline)
-            
+
             Text("+ ボタンで新しいカードを作成しましょう")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
@@ -121,7 +130,7 @@ struct CardsListView: View {
                 .padding(.horizontal)
         }
     }
-    
+
     private func deleteCards(at offsets: IndexSet) {
         for index in offsets {
             let card = cardsViewModel.filteredCards[index]

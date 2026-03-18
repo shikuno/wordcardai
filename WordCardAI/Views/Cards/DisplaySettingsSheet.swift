@@ -7,11 +7,9 @@ struct DisplaySettingsSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     @Binding var showBackFirst: Bool
-    let cards: [WordCard]
-    @Binding var currentIndex: Int
-
-    // フィルター（表示するステータス）
-    @State private var filterStatuses: Set<LearningStatus> = Set(LearningStatus.allCases)
+    @Binding var filterStatuses: Set<LearningStatus>
+    let allCards: [WordCard]
+    let onApply: (Set<LearningStatus>) -> Void
 
     var body: some View {
         NavigationStack {
@@ -27,46 +25,56 @@ struct DisplaySettingsSheet: View {
                 // ── ステータスフィルター ──
                 Section {
                     ForEach(LearningStatus.allCases, id: \.self) { status in
-                        let count = cards.filter { $0.learningStatus == status }.count
+                        let count = allCards.filter { $0.learningStatus == status }.count
                         HStack {
-                            Label {
-                                Text(status.displayName)
-                            } icon: {
-                                Image(systemName: filterStatuses.contains(status) ? "checkmark.circle.fill" : "circle")
-                                    .foregroundColor(filterStatuses.contains(status) ? statusColor(status) : .secondary)
-                            }
+                            Image(systemName: filterStatuses.contains(status)
+                                ? "checkmark.circle.fill" : "circle")
+                                .foregroundColor(filterStatuses.contains(status)
+                                    ? statusColor(status) : .secondary)
+                            Text(status.displayName)
                             Spacer()
                             Text("\(count)枚")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
                         .contentShape(Rectangle())
-                        .onTapGesture { toggleFilter(status) }
+                        .onTapGesture { toggle(status) }
                     }
                 } header: {
                     Text("表示するステータス")
                 } footer: {
-                    Text("オフにしたステータスのカードはスキップされます（準備中）")
+                    Text("選択したステータスのカードのみ表示します")
                         .font(.caption2)
+                }
+
+                // ── 全選択・全解除 ──
+                Section {
+                    Button("すべて表示") {
+                        filterStatuses = Set(LearningStatus.allCases)
+                        onApply(filterStatuses)
+                    }
                 }
             }
             .navigationTitle("表示設定")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("完了") { dismiss() }
+                    Button("完了") {
+                        onApply(filterStatuses)
+                        dismiss()
+                    }
                 }
             }
         }
     }
 
-    private func toggleFilter(_ status: LearningStatus) {
+    private func toggle(_ status: LearningStatus) {
         if filterStatuses.contains(status) {
-            // 最低1つは残す
             if filterStatuses.count > 1 { filterStatuses.remove(status) }
         } else {
             filterStatuses.insert(status)
         }
+        onApply(filterStatuses)
     }
 
     private func statusColor(_ status: LearningStatus) -> Color {

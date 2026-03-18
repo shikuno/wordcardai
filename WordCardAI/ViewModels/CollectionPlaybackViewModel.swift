@@ -12,6 +12,7 @@ import Combine
 @MainActor
 final class CollectionPlaybackViewModel: ObservableObject {
     @Published private(set) var cards: [WordCard]
+    private(set) var allCards: [WordCard] = []   // フィルター前の全カード
     @Published var currentIndex: Int = 0
     @Published var isShowingBack: Bool = false
     @Published var isPlaying = false
@@ -40,6 +41,7 @@ final class CollectionPlaybackViewModel: ObservableObject {
 
     init(cards: [WordCard], speechService: SpeechService? = nil) {
         self.cards = cards
+        self.allCards = cards
         self.speechService = speechService ?? SpeechService.shared
     }
 
@@ -123,6 +125,7 @@ final class CollectionPlaybackViewModel: ObservableObject {
     }
 
     func updateCards(_ newCards: [WordCard]) {
+        allCards = newCards
         cards = newCards
         if cards.isEmpty {
             currentIndex = 0
@@ -131,6 +134,24 @@ final class CollectionPlaybackViewModel: ObservableObject {
             return
         }
         currentIndex = min(currentIndex, cards.count - 1)
+        isShowingBack = false
+    }
+
+    /// ステータスフィルターを適用してcardsを絞り込む
+    func applyFilter(statuses: Set<LearningStatus>) {
+        let current = currentCard
+        if statuses.isSuperset(of: LearningStatus.allCases) {
+            cards = allCards
+        } else {
+            cards = allCards.filter { statuses.contains($0.learningStatus) }
+        }
+        if cards.isEmpty { cards = allCards }  // 全消えを防ぐ
+        // 現在のカードに近い位置に移動
+        if let current = current, let idx = cards.firstIndex(where: { $0.id == current.id }) {
+            currentIndex = idx
+        } else {
+            currentIndex = 0
+        }
         isShowingBack = false
     }
 

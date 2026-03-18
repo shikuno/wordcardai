@@ -17,11 +17,12 @@ struct CollectionCardView: View {
     @State private var showingList = false
     @State private var showingCreateCard = false
     @State private var showingLearnMode = false
+    @State private var showingDisplaySettings = false
+    @State private var showBackFirst = false
+    @State private var filterStatuses: Set<LearningStatus> = Set(LearningStatus.allCases)
     @GestureState private var dragOffset: CGFloat = 0
     @State private var showFlipHint = false
     @State private var editingCard: WordCard?
-    @State private var showBackFirst = false
-    @State private var showingDisplaySettings = false
 
     init(collection: CardCollection, cardsViewModel: CardsViewModel, collectionsViewModel: CollectionsViewModel) {
         self.collection = collection
@@ -76,11 +77,6 @@ struct CollectionCardView: View {
                 } label: {
                     Image(systemName: "slider.horizontal.3")
                 }
-                Button {
-                    showingDisplaySettings = true
-                } label: {
-                    Image(systemName: "eye")
-                }
             }
         }
         .onAppear {
@@ -111,7 +107,14 @@ struct CollectionCardView: View {
                 CardsListView(
                     collection: collection,
                     cardsViewModel: cardsViewModel,
-                    collectionsViewModel: collectionsViewModel
+                    collectionsViewModel: collectionsViewModel,
+                    onSelectCard: { card in
+                        // 選択カードにジャンプしてシートを閉じる
+                        if let idx = playbackViewModel.cards.firstIndex(where: { $0.id == card.id }) {
+                            playbackViewModel.jumpTo(index: idx)
+                        }
+                        showingList = false
+                    }
                 )
                 .environmentObject(settingsService)
             }
@@ -137,14 +140,6 @@ struct CollectionCardView: View {
                 card: card
             )
         }
-        .sheet(isPresented: $showingDisplaySettings) {
-            DisplaySettingsSheet(
-                showBackFirst: $showBackFirst,
-                cards: playbackViewModel.cards,
-                currentIndex: $playbackViewModel.currentIndex
-            )
-            .presentationDetents([.medium])
-        }
     }
 
     // MARK: - Header
@@ -159,7 +154,7 @@ struct CollectionCardView: View {
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
                         .background(Color.blue.opacity(0.1))
-                        .foregroundColor(.primary)
+                        .foregroundColor(.blue)
                         .clipShape(Capsule())
                 }
                 Spacer()
@@ -247,65 +242,51 @@ struct CollectionCardView: View {
 
     // 1枚のカードセル
     private func cardCell(card: WordCard, idx: Int, cardWidth: CGFloat, isCurrent: Bool) -> some View {
-        let showingBack = isCurrent && (showBackFirst
-            ? !playbackViewModel.isShowingBack
-            :  playbackViewModel.isShowingBack)
-
-        return ZStack {
+        ZStack {
             RoundedRectangle(cornerRadius: 18)
                 .fill(Color(uiColor: .secondarySystemBackground))
                 .shadow(color: .black.opacity(0.08), radius: 8, y: 3)
 
-            // テキスト：カード中央固定
-            VStack(spacing: 12) {
-                if showingBack {
-                    Text(card.english)
-                        .font(.title.bold())
-                        .foregroundColor(.primary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 24)
-                    Divider().padding(.horizontal, 40)
-                    Text(card.japanese)
-                        .font(.title3)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 24)
-                } else {
-                    Text(card.japanese)
-                        .font(.title.bold())
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 24)
-                        .opacity(isCurrent ? 1.0 : 0.35)
-                }
-            }
+            VStack(spacing: 16) {
+                Spacer()
 
-            // 編集ボタン：右下（現在カードのみ・カードと同時にスライド）
-            if isCurrent {
-                VStack {
-                    Spacer()
-                    HStack {
-                        Spacer()
-                        Button { editingCard = card } label: {
-                            Image(systemName: "pencil")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundColor(.secondary)
-                                .padding(8)
-                                .background(Color(uiColor: .tertiarySystemBackground))
-                                .clipShape(Circle())
-                        }
-                        .padding(12)
-                    }
+                // 表面テキストは常に表示（隣カードも薄く見える）
+                Text(card.japanese)
+                    .font(.title.bold())
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
+                    .opacity(isCurrent ? 1.0 : 0.35)
+
+                // 裏面は現在カードのみ
+                if isCurrent && playbackViewModel.isShowingBack {
+                    Divider().padding(.horizontal, 40)
+                    Text(card.english)
+                        .font(.title2)
+                        .foregroundColor(.blue)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 24)
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                }
+
+                Spacer()
+
+                if isCurrent && showFlipHint {
+                    Text("タップで裏返す")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(.bottom, 12)
+                        .transition(.opacity)
                 }
             }
-        }
-        .contentShape(Rectangle())
-        .onTapGesture {
-            guard isCurrent else { return }
-            withAnimation(.easeInOut(duration: 0.22)) {
-                playbackViewModel.toggleSide()
-                if showFlipHint {
-                    showFlipHint = false
-                    settingsService.updateHasSeenCardFlipHint(true)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                guard isCurrent else { return }
+                withAnimation(.easeInOut(duration: 0.22)) {
+                    playbackViewModel.toggleSide()
+                    if showFlipHint {
+                        showFlipHint = false
+                        settingsService.updateHasSeenCardFlipHint(true)
+                    }
                 }
             }
         }
@@ -345,7 +326,6 @@ struct CollectionCardView: View {
                 .padding(.vertical, 13)
             }
             .buttonStyle(.bordered)
-
         }
     }
 
