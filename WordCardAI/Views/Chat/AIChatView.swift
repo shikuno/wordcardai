@@ -56,8 +56,17 @@ struct AIChatView: View {
             .navigationTitle("AI相談")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItemGroup(placement: .topBarTrailing) {
                     if !vm.messages.isEmpty {
+                        // 会話全体をコピー
+                        Button {
+                            let all = vm.messages.map { m in
+                                (m.role == .user ? "自分: " : "AI: ") + m.text
+                            }.joined(separator: "\n\n")
+                            UIPasteboard.general.string = all
+                        } label: {
+                            Image(systemName: "doc.on.doc")
+                        }
                         Button {
                             withAnimation { vm.clear() }
                         } label: {
@@ -195,6 +204,13 @@ struct MessageBubble: View {
                     .background(Color.blue)
                     .foregroundColor(.white)
                     .clipShape(RoundedRectangle(cornerRadius: 18))
+                    .contextMenu {
+                        Button {
+                            UIPasteboard.general.string = message.text
+                        } label: {
+                            Label("コピー", systemImage: "doc.on.doc")
+                        }
+                    }
             } else {
                 ZStack {
                     Circle().fill(Color.blue).frame(width: 28, height: 28)
@@ -207,6 +223,13 @@ struct MessageBubble: View {
                     .background(Color(uiColor: .secondarySystemBackground))
                     .foregroundColor(.primary)
                     .clipShape(RoundedRectangle(cornerRadius: 18))
+                    .contextMenu {
+                        Button {
+                            UIPasteboard.general.string = message.text
+                        } label: {
+                            Label("コピー", systemImage: "doc.on.doc")
+                        }
+                    }
                 Spacer(minLength: 60)
             }
         }

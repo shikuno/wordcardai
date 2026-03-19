@@ -30,7 +30,7 @@ struct CollectionCardView: View {
         self.collectionsViewModel = collectionsViewModel
 
         let cards = cardsViewModel.cards(for: collection.id)
-        _playbackViewModel = StateObject(wrappedValue: CollectionPlaybackViewModel(cards: cards))
+        _playbackViewModel = StateObject(wrappedValue: CollectionPlaybackViewModel(cards: cards, collectionId: collection.id.uuidString))
     }
 
     var body: some View {
@@ -319,21 +319,19 @@ struct CollectionCardView: View {
     /// 文字数に応じてフォントサイズを自動調整するText
     @ViewBuilder
     private func adaptiveText(_ text: String, maxLength: Int) -> some View {
-        // 改行を半角スペースに正規化（AIが \n を混入させることがあるため）
-        let normalized = text
-            .components(separatedBy: .newlines)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-            .joined(separator: " ")
-        let len = normalized.count
+        let len = text.count
         let font: Font = len <= 20 ? .title.bold()
                        : len <= 40 ? .title2.bold()
                        : len <= 80 ? .title3.bold()
                        :             .body.bold()
-        Text(normalized)
+        // U+0027（'）をU+2019（'）に置換 → SwiftUIがアポストロフィ前後で
+        // 不正な折り返しをするのを防ぐ
+        let display = text.replacingOccurrences(of: "'", with: "\u{2019}")
+        Text(display)
             .font(font)
-            .lineLimit(4)
-            .minimumScaleFactor(0.6)
+            .multilineTextAlignment(.center)
+            .lineLimit(nil)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     private func statusColor(_ status: LearningStatus) -> Color {

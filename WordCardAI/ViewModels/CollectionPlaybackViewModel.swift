@@ -13,15 +13,18 @@ import Combine
 final class CollectionPlaybackViewModel: ObservableObject {
     @Published private(set) var cards: [WordCard]
     private(set) var allCards: [WordCard] = []   // フィルター前の全カード
-    @Published var currentIndex: Int = 0
+    @Published var currentIndex: Int = 0 {
+        didSet { persistIndex() }
+    }
     @Published var isShowingBack: Bool = false
     @Published var isPlaying = false
     @Published var playbackRate: Double = 1.0
     @Published var speechTarget: PlaybackSpeechTarget = .frontOnly
-    @Published var autoAdvanceDelay: Double = 2.0   // 裏→次カードの間隔
-    @Published var frontToBackDelay: Double = 1.0   // 表→裏の間隔
+    @Published var autoAdvanceDelay: Double = 2.0
+    @Published var frontToBackDelay: Double = 1.0
 
     private let speechService: SpeechService
+    private let collectionId: String
 
     let playbackPresets: [Double] = [0.25, 0.5, 1.0, 1.5, 2.0]
 
@@ -30,19 +33,28 @@ final class CollectionPlaybackViewModel: ObservableObject {
     }
 
     var autoAdvanceDelayText: String {
-        if autoAdvanceDelay == 0 {
-            return "0秒"
-        }
+        if autoAdvanceDelay == 0 { return "0秒" }
         if autoAdvanceDelay.truncatingRemainder(dividingBy: 1) == 0 {
             return "\(Int(autoAdvanceDelay))秒"
         }
         return String(format: "%.1f秒", autoAdvanceDelay)
     }
 
-    init(cards: [WordCard], speechService: SpeechService? = nil) {
+    init(cards: [WordCard], collectionId: String = "", speechService: SpeechService? = nil) {
         self.cards = cards
         self.allCards = cards
+        self.collectionId = collectionId
         self.speechService = speechService ?? SpeechService.shared
+        // 保存済みのインデックスを復元
+        if !collectionId.isEmpty && !cards.isEmpty {
+            let saved = UserDefaults.standard.integer(forKey: "cardIndex_\(collectionId)")
+            self.currentIndex = max(0, min(saved, cards.count - 1))
+        }
+    }
+
+    private func persistIndex() {
+        guard !collectionId.isEmpty else { return }
+        UserDefaults.standard.set(currentIndex, forKey: "cardIndex_\(collectionId)")
     }
 
     var currentCard: WordCard? {
