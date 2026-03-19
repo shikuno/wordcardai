@@ -362,7 +362,8 @@ struct CollectionCardView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 13)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.bordered)
+            .tint(.appAccent)
 
             Button {
                 showingLearnMode = true
