@@ -328,7 +328,7 @@ struct CollectionCardView: View {
     private func adaptiveText(_ text: String, maxLength: Int) -> some View {
         return CardTextLabel(
             text: text,
-            font: .systemFont(ofSize: 16, weight: .semibold),
+            font: .systemFont(ofSize: 22, weight: .semibold),
             color: .label,
             alignment: .center
         )
