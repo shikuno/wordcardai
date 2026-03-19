@@ -15,6 +15,7 @@ struct WordCardAIApp: App {
         let settingsService = SettingsService(storage: storage)
         let collectionsVM = CollectionsViewModel(storage: storage)
         let cardsVM = CardsViewModel(storage: storage)
+        cardsVM.collectionsViewModel = collectionsVM   // カード操作時にデッキのupdatedAtを更新
         _settingsService = StateObject(wrappedValue: settingsService)
         _collectionsViewModel = StateObject(wrappedValue: collectionsVM)
         _cardsViewModel = StateObject(wrappedValue: cardsVM)

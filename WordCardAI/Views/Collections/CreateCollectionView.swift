@@ -17,10 +17,10 @@ struct CreateCollectionView: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("カード集の名前", text: $title)
+                    TextField("デッキ名", text: $title)
                         .focused($isTitleFocused)
                 } header: {
-                    Text("カード集名")
+                    Text("デッキ名")
                 }
                 
                 Section {
@@ -29,7 +29,7 @@ struct CreateCollectionView: View {
                         .foregroundColor(.secondary)
                 }
             }
-            .navigationTitle("新しいカード集")
+            .navigationTitle("新しいデッキ")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif

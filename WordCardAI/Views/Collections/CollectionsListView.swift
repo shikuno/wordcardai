@@ -36,7 +36,7 @@ struct CollectionsListView: View {
                                 .font(.title2)
                                 .foregroundColor(.white)
                                 .frame(width: 60, height: 60)
-                                .background(Color.appAccent)
+                                .background(Color.blue)
                                 .clipShape(Circle())
                                 .shadow(radius: 4)
                         }
@@ -44,7 +44,6 @@ struct CollectionsListView: View {
                     }
                 }
             }
-            .navigationTitle("カード集")
             .toolbar {
                 #if os(iOS)
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -90,10 +89,10 @@ struct CollectionsListView: View {
                 .font(.system(size: 60))
                 .foregroundColor(.secondary)
             
-            Text("カード集がありません")
+            Text("デッキがありません")
                 .font(.headline)
             
-            Text("+ ボタンで新しいカード集を作成しましょう")
+            Text("+ ボタンで新しいデッキを作成しましょう")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
@@ -116,9 +115,13 @@ struct CollectionRow: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("📚")
-                    .font(.title2)
+            HStack(spacing: 10) {
+                Image(systemName: "rectangle.stack.fill")
+                    .font(.title3)
+                    .foregroundStyle(Color.appAccent)
+                    .frame(width: 28, height: 28)
+                    .background(Color.appAccent.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 Text(collection.title)
                     .font(.headline)
             }
@@ -130,7 +133,7 @@ struct CollectionRow: View {
                 
                 Spacer()
                 
-                Text(collection.createdAt.formatted(style: .short))
+                Text("更新: \(collection.updatedAt.shortDateTimeFormatted())")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }

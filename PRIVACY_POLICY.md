@@ -1,6 +1,6 @@
 # プライバシーポリシー / Privacy Policy
 
-**最終更新日: 2025年11月23日**
+**最終更新日: 2026年3月19日**
 
 ## 日本語
 
@@ -23,7 +23,7 @@ Yuya Furuichi（以下「開発者」）は、WordCardAI（以下「本アプリ
 
 ### データの保存
 
-本アプリで作成されたすべてのデータ（カード集、単語カード、設定など）は、**ユーザーのデバイス内にのみ保存**されます。
+本アプリで作成されたすべてのデータ（デッキ、単語カード、設定など）は、**ユーザーのデバイス内にのみ保存**されます。
 
 - データは iOS の UserDefaults を使用してローカルに保存されます
 - データは外部サーバーに送信されません
@@ -32,7 +32,7 @@ Yuya Furuichi（以下「開発者」）は、WordCardAI（以下「本アプリ
 
 ### AI 翻訳機能について
 
-現在のバージョン（1.0.0）では、AI 翻訳機能はモックサービスとして実装されており、**実際のネットワーク通信は行いません**。
+現在のバージョン（1.0.1）では、AI 翻訳機能はモックサービスとして実装されており、**実際のネットワーク通信は行いません**。
 
 将来のバージョンで Apple の Translation Framework を統合する予定ですが、その場合でも：
 
@@ -95,7 +95,7 @@ The App does not collect, store, or transmit the following types of information:
 
 ### Data Storage
 
-All data created in the App (card collections, word cards, settings, etc.) is **stored only on the user's device**.
+All data created in the App (decks, word cards, settings, etc.) is **stored only on the user's device**.
 
 - Data is stored locally using iOS UserDefaults
 - Data is not transmitted to external servers
@@ -104,7 +104,7 @@ All data created in the App (card collections, word cards, settings, etc.) is **
 
 ### AI Translation Feature
 
-The current version (1.0.0) implements the AI translation feature as a mock service and **does not perform actual network communication**.
+The current version (1.0.1) implements the AI translation feature as a mock service and **does not perform actual network communication**.
 
 We plan to integrate Apple's Translation Framework in future versions, but even then:
 

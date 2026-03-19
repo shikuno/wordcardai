@@ -22,4 +22,11 @@ extension Date {
         formatter.unitsStyle = .full
         return formatter.localizedString(for: self, relativeTo: Date())
     }
+    
+    func shortDateTimeFormatted() -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "M/d HH:mm"
+        formatter.locale = Locale(identifier: "ja_JP")
+        return formatter.string(from: self)
+    }
 }

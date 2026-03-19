@@ -501,7 +501,7 @@ struct CollectionCardView: View {
             Image(systemName: "rectangle.stack.badge.plus")
                 .font(.system(size: 60))
                 .foregroundColor(.secondary)
-            Text("このカード集にはまだカードがありません")
+            Text("このデッキにはまだカードがありません")
                 .font(.headline)
             Text("まずはカードを追加して、あとから一覧で編集できます")
                 .font(.subheadline)
@@ -520,5 +520,3 @@ struct CollectionCardView: View {
         playbackViewModel.updateCards(cardsViewModel.cards(for: collection.id))
     }
 }
-
-

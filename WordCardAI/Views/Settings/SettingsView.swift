@@ -60,7 +60,7 @@ struct SettingsView: View {
     private var dataSection: some View {
         Section {
             HStack {
-                Text("カード集数")
+                Text("デッキ数")
                 Spacer()
                 Text("\(collectionsViewModel.collections.count)")
                     .foregroundColor(.secondary)
@@ -96,7 +96,7 @@ struct SettingsView: View {
             HStack {
                 Text("バージョン")
                 Spacer()
-                Text("1.0.0")
+                Text("1.0.1")
                     .foregroundColor(.secondary)
             }
             

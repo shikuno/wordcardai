@@ -16,7 +16,7 @@ struct ContentView: View {
         TabView {
             CollectionsListView(storage: UserDefaultsStorage(), cardsViewModel: cardsViewModel)
                 .tabItem {
-                    Label("カード集", systemImage: "rectangle.stack.fill")
+                    Label("デッキ", systemImage: "rectangle.stack.fill")
                 }
 
             AIChatView()

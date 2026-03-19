@@ -17,6 +17,7 @@ class CardsViewModel: ObservableObject {
     
     private let storage: StorageProtocol
     private var allCards: [WordCard] = []
+    weak var collectionsViewModel: CollectionsViewModel?
     
     var filteredCards: [WordCard] {
         if searchText.isEmpty {
@@ -51,6 +52,7 @@ class CardsViewModel: ObservableObject {
         allCards.append(card)
         saveCards()
         loadCards(for: card.collectionId)
+        collectionsViewModel?.touchUpdatedAt(collectionId: card.collectionId)
     }
     
     func updateCard(_ card: WordCard) {
@@ -58,13 +60,16 @@ class CardsViewModel: ObservableObject {
             allCards[index] = card
             saveCards()
             loadCards(for: card.collectionId)
+            collectionsViewModel?.touchUpdatedAt(collectionId: card.collectionId)
         }
     }
     
     func deleteCard(_ card: WordCard) {
+        let cid = card.collectionId
         allCards.removeAll { $0.id == card.id }
         saveCards()
-        loadCards(for: card.collectionId)
+        loadCards(for: cid)
+        collectionsViewModel?.touchUpdatedAt(collectionId: cid)
     }
     
     func deleteCards(for collectionId: UUID) {
