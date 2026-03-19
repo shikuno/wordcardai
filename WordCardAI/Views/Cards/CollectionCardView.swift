@@ -331,7 +331,7 @@ struct CollectionCardView: View {
                            : len <= 40 ? .boldSystemFont(ofSize: 22)
                            : len <= 80 ? .boldSystemFont(ofSize: 18)
                            :             .boldSystemFont(ofSize: 15)
-        CardTextLabel(
+        return CardTextLabel(
             text: text,
             font: uiFont,
             color: .label,
