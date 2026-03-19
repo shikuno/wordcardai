@@ -161,25 +161,7 @@ struct CollectionCardView: View {
     // MARK: - Header
 
     private var headerSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            // 上段：ステータスバッジ + 枚数
-            HStack(alignment: .center) {
-                if let card = playbackViewModel.currentCard {
-                    Text(card.learningStatus.displayName)
-                        .font(.caption.weight(.semibold))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.blue.opacity(0.1))
-                        .foregroundColor(.blue)
-                        .clipShape(Capsule())
-                }
-                Spacer()
-                Text(playbackViewModel.progressText)
-                    .font(.subheadline.monospacedDigit())
-                    .foregroundColor(.secondary)
-            }
-
-            // 下段：ジャンプスライダー（10枚以上のとき表示）
+        VStack(spacing: 4) {
             if playbackViewModel.cards.count >= 10 {
                 cardJumpSlider
             }
@@ -188,19 +170,43 @@ struct CollectionCardView: View {
 
     private var cardJumpSlider: some View {
         let total = playbackViewModel.cards.count
-        // Slider は Double のみ受け付けるのでローカル Binding で変換
-        let sliderBinding = Binding<Double>(
-            get: { Double(playbackViewModel.currentIndex) },
-            set: { newVal in
-                let idx = Int(newVal.rounded())
-                guard idx != playbackViewModel.currentIndex else { return }
-                playbackViewModel.jumpTo(index: idx)
+        return VStack(spacing: 4) {
+            GeometryReader { geo in
+                let trackW = geo.size.width
+                let progress: CGFloat = total > 1
+                    ? CGFloat(playbackViewModel.currentIndex) / CGFloat(total - 1)
+                    : 0
+                ZStack(alignment: .leading) {
+                    // トラック背景
+                    Capsule()
+                        .fill(Color.secondary.opacity(0.15))
+                        .frame(height: 3)
+                    // 進捗バー
+                    Capsule()
+                        .fill(Color.secondary.opacity(0.4))
+                        .frame(width: trackW * progress, height: 3)
+                }
+                .frame(height: 3)
+                .frame(maxWidth: .infinity)
+                // タップ・ドラッグで位置変更（タッチ領域を上下に広げる）
+                .contentShape(Rectangle().inset(by: -12))
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { val in
+                            let ratio = max(0, min(1, val.location.x / trackW))
+                            let idx = Int((ratio * Double(total - 1)).rounded())
+                            if idx != playbackViewModel.currentIndex {
+                                playbackViewModel.jumpTo(index: idx)
+                            }
+                        }
+                )
             }
-        )
-
-        return Slider(value: sliderBinding, in: 0...Double(total - 1), step: 1)
-            .tint(Color.secondary.opacity(0.5))
-            .scaleEffect(x: 1, y: 0.6)  // トラックを細く見せる
+            .frame(height: 3)
+            // 枚数表示（スライダー下・中央）
+            Text(playbackViewModel.progressText)
+                .font(.caption2.monospacedDigit())
+                .foregroundColor(.secondary)
+        }
     }
 
     // MARK: - Card Carousel
