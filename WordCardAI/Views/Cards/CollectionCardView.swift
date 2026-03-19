@@ -75,7 +75,7 @@ struct CollectionCardView: View {
                 Button {
                     showingList = true
                 } label: {
-                    Image(systemName: "slider.horizontal.3")
+                    Image(systemName: "rectangle.stack.fill")
                 }
                 Button {
                     showingDisplaySettings = true

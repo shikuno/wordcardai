@@ -216,16 +216,16 @@ final class CollectionPlaybackViewModel: ObservableObject {
 }
 
 enum PlaybackSpeechTarget: String, CaseIterable, Identifiable {
-    case frontOnly
     case frontAndBack
+    case frontOnly
     case backOnly
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
+        case .frontAndBack: return "表裏"
         case .frontOnly: return "表だけ"
-        case .frontAndBack: return "表→裏"
         case .backOnly: return "裏だけ"
         }
     }
