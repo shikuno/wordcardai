@@ -286,29 +286,29 @@ struct CollectionCardView: View {
             }
         }
         // ── ステータスバッジ（左上）・編集ボタン（右上）をoverlay ──
+        // isCurrent条件をopacityに変えることでカード切替時のチカチカを防ぐ
         .overlay(alignment: .topLeading) {
-            if isCurrent {
-                Text(card.learningStatus.displayName)
-                    .font(.caption.weight(.semibold))
-                    .padding(.horizontal, 8).padding(.vertical, 4)
-                    .background(statusColor(card.learningStatus).opacity(0.12))
-                    .foregroundColor(statusColor(card.learningStatus))
-                    .clipShape(Capsule())
-                    .padding(14)
-            }
+            Text(card.learningStatus.displayName)
+                .font(.caption.weight(.semibold))
+                .padding(.horizontal, 8).padding(.vertical, 4)
+                .background(statusColor(card.learningStatus).opacity(0.12))
+                .foregroundColor(statusColor(card.learningStatus))
+                .clipShape(Capsule())
+                .padding(14)
+                .opacity(isCurrent ? 1.0 : 0.0)
         }
         .overlay(alignment: .topTrailing) {
-            if isCurrent {
-                Button { editingCard = card } label: {
-                    Image(systemName: "pencil")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(.secondary)
-                        .padding(8)
-                        .background(Color(uiColor: .tertiarySystemBackground))
-                        .clipShape(Circle())
-                }
-                .padding(12)
+            Button { editingCard = card } label: {
+                Image(systemName: "pencil")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(.secondary)
+                    .padding(8)
+                    .background(Color(uiColor: .tertiarySystemBackground))
+                    .clipShape(Circle())
             }
+            .padding(12)
+            .opacity(isCurrent ? 1.0 : 0.0)
+            .allowsHitTesting(isCurrent)
         }
         .contentShape(Rectangle())
         .onTapGesture {
@@ -324,16 +324,11 @@ struct CollectionCardView: View {
         .frame(width: cardWidth, height: 290)
     }
 
-    /// 文字数に応じてフォントサイズを自動調整
+    /// カードテキスト表示（固定サイズ・UILabelで折り返し制御）
     private func adaptiveText(_ text: String, maxLength: Int) -> some View {
-        let len = text.count
-        let uiFont: UIFont = len <= 20 ? .boldSystemFont(ofSize: 28)
-                           : len <= 40 ? .boldSystemFont(ofSize: 22)
-                           : len <= 80 ? .boldSystemFont(ofSize: 18)
-                           :             .boldSystemFont(ofSize: 15)
         return CardTextLabel(
             text: text,
-            font: uiFont,
+            font: .systemFont(ofSize: 16, weight: .semibold),
             color: .label,
             alignment: .center
         )
