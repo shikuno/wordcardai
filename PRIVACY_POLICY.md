@@ -32,7 +32,7 @@ Yuya Furuichi（以下「開発者」）は、WordCardAI（以下「本アプリ
 
 ### AI 翻訳機能について
 
-現在のバージョン（1.0.1）では、AI 翻訳機能はモックサービスとして実装されており、**実際のネットワーク通信は行いません**。
+現在のバージョン（2.0）では、AI 翻訳機能はモックサービスとして実装されており、**実際のネットワーク通信は行いません**。
 
 将来のバージョンで Apple の Translation Framework を統合する予定ですが、その場合でも：
 
@@ -104,7 +104,7 @@ All data created in the App (decks, word cards, settings, etc.) is **stored only
 
 ### AI Translation Feature
 
-The current version (1.0.1) implements the AI translation feature as a mock service and **does not perform actual network communication**.
+The current version (2.0) implements the AI translation feature as a mock service and **does not perform actual network communication**.
 
 We plan to integrate Apple's Translation Framework in future versions, but even then:
 
