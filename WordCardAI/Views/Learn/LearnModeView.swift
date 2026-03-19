@@ -137,7 +137,7 @@ struct LearnModeView: View {
                         Button { viewModel.questionCount = count } label: {
                             Text("\(count)問").font(.subheadline.weight(.semibold))
                                 .frame(maxWidth: .infinity).padding(.vertical, 10)
-                                .background(sel ? Color.blue : Color.systemSecondaryBackgroundCompat)
+                                .background(sel ? Color.appAccent : Color.systemSecondaryBackgroundCompat)
                                 .foregroundColor(sel ? .white : .primary)
                                 .clipShape(RoundedRectangle(cornerRadius: 10))
                         }.buttonStyle(.plain)
@@ -152,7 +152,7 @@ struct LearnModeView: View {
                         Button { viewModel.order = ord } label: {
                             HStack(spacing: 4) { Image(systemName: ord.icon); Text(ord.title).font(.subheadline.weight(.medium)) }
                                 .frame(maxWidth: .infinity).padding(.vertical, 10)
-                                .background(sel ? Color.blue : Color.systemSecondaryBackgroundCompat)
+                                .background(sel ? Color.appAccent : Color.systemSecondaryBackgroundCompat)
                                 .foregroundColor(sel ? .white : .primary)
                                 .clipShape(RoundedRectangle(cornerRadius: 10))
                         }.buttonStyle(.plain)
@@ -174,7 +174,7 @@ struct LearnModeView: View {
             } label: {
                 Text("\(viewModel.questionCount)問スタート").font(.headline).foregroundColor(.white)
                     .frame(maxWidth: .infinity).padding()
-                    .background(selectedMode == .flashcard ? Color.blue : Color.green).cornerRadius(14)
+                    .background(selectedMode == .flashcard ? Color.appAccent : Color.green).cornerRadius(14)
             }
         }
     }
@@ -249,7 +249,7 @@ struct LearnModeView: View {
             Text(english).font(.body.weight(.medium)).fixedSize(horizontal: false, vertical: true)
             Text(japanese).font(.subheadline).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
             Button(action: onSpeak) { Label("聞く", systemImage: "speaker.wave.2.fill").font(.caption.weight(.semibold)) }
-                .buttonStyle(.bordered).tint(.blue)
+                .buttonStyle(.bordered).tint(.appAccent)
         }
         .padding().frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(uiColor: .secondarySystemBackground))
@@ -291,13 +291,13 @@ struct LearnModeView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(scene.card.japanese).font(.subheadline).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
                     Divider()
-                    Text(scene.card.english).font(.title3.weight(.bold)).foregroundColor(.blue).fixedSize(horizontal: false, vertical: true)
+                    Text(scene.card.english).font(.title3.weight(.bold)).foregroundColor(.appAccent).fixedSize(horizontal: false, vertical: true)
                     if case .showAnswer = convVM.phase {
                         HStack(spacing: 6) { ProgressView().scaleEffect(0.7); Text("読み上げ中…").font(.caption).foregroundColor(.secondary) }
                     } else {
                         Button { convVM.speakAnswer() } label: {
                             Label("もう一度聞く", systemImage: "speaker.wave.2.fill").font(.caption.weight(.semibold))
-                        }.buttonStyle(.bordered).tint(.blue)
+                        }.buttonStyle(.bordered).tint(.appAccent)
                     }
                 }
             default: EmptyView()
@@ -358,7 +358,7 @@ struct LearnModeView: View {
     private var progressSection: some View {
         VStack(spacing: 8) {
             Text(viewModel.progressText).font(.headline).foregroundColor(.secondary)
-            ProgressView(value: viewModel.progress).tint(.blue)
+            ProgressView(value: viewModel.progress).tint(.appAccent)
         }.padding(.top)
     }
 
@@ -370,7 +370,7 @@ struct LearnModeView: View {
                 Text(card.japanese).font(.title).fontWeight(.bold).multilineTextAlignment(.center).padding(.horizontal)
                 if viewModel.isShowingAnswer {
                     Divider().padding(.horizontal, 40)
-                    Text(card.english).font(.title2).foregroundColor(.blue)
+                    Text(card.english).font(.title2).foregroundColor(.appAccent)
                         .multilineTextAlignment(.center).padding(.horizontal)
                         .transition(.opacity.combined(with: .scale))
                 }
@@ -403,7 +403,7 @@ struct LearnModeView: View {
             } label: {
                 Text(viewModel.isShowingAnswer ? "答えを隠す" : "答えを見る").font(.headline).foregroundColor(.white)
                     .frame(maxWidth: .infinity).padding()
-                    .background(viewModel.isShowingAnswer ? Color.orange : Color.blue).cornerRadius(12)
+                    .background(viewModel.isShowingAnswer ? Color.orange : Color.appAccent).cornerRadius(12)
             }.padding(.horizontal, 20).padding(.top, 8)
         }
     }

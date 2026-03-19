@@ -160,7 +160,7 @@ struct CreateEditCardView: View {
                             Spacer()
                             if viewModel.selectedCandidateIndex == index {
                                 Image(systemName: "checkmark.circle.fill")
-                                    .foregroundColor(.blue)
+                                    .foregroundColor(.appAccent)
                             } else {
                                 Image(systemName: "circle")
                                     .foregroundColor(.gray)

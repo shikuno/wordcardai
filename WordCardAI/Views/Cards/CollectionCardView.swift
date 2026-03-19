@@ -187,11 +187,11 @@ struct CollectionCardView: View {
                     Capsule()
                         .fill(Color.secondary.opacity(0.4))
                         .frame(width: thumbX, height: 3)
-                    // つまみ（小さい白丸）
+                    // つまみ（小さいオフホワイト丸）
                     Circle()
-                        .fill(Color.white)
+                        .fill(Color(white: 0.96))
                         .frame(width: 10, height: 10)
-                        .shadow(color: .black.opacity(0.2), radius: 2, y: 1)
+                        .shadow(color: .black.opacity(0.18), radius: 2, y: 1)
                         .offset(x: thumbX - 5)
                 }
                 .frame(height: 10)
@@ -267,8 +267,8 @@ struct CollectionCardView: View {
 
         return ZStack {
             RoundedRectangle(cornerRadius: 18)
-                .fill(Color(uiColor: .secondarySystemBackground))
-                .shadow(color: .black.opacity(0.08), radius: 8, y: 3)
+                .fill(Color.cardBackground)
+                .shadow(color: .black.opacity(0.07), radius: 8, y: 3)
 
             // ── テキスト中央 ──
             VStack(spacing: 0) {
@@ -329,7 +329,7 @@ struct CollectionCardView: View {
         return CardTextLabel(
             text: text,
             font: .systemFont(ofSize: 22, weight: .semibold),
-            color: .label,
+            color: UIColor(named: "CardText") ?? .label,
             alignment: .center
         )
     }
@@ -407,7 +407,7 @@ struct CollectionCardView: View {
                 HStack(spacing: 8) {
                     Text("0.25x").font(.caption2).foregroundColor(.secondary)
                     Slider(value: $playbackViewModel.playbackRate, in: 0.25...2.0, step: 0.25)
-                        .tint(.blue)
+                        .tint(.appAccent)
                     Text("2.0x").font(.caption2).foregroundColor(.secondary)
                 }
             }

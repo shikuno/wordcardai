@@ -36,7 +36,7 @@ struct CollectionsListView: View {
                                 .font(.title2)
                                 .foregroundColor(.white)
                                 .frame(width: 60, height: 60)
-                                .background(Color.blue)
+                                .background(Color.appAccent)
                                 .clipShape(Circle())
                                 .shadow(radius: 4)
                         }

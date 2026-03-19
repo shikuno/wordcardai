@@ -172,7 +172,7 @@ struct AIChatView: View {
 
     private var aiBadge: some View {
         ZStack {
-            Circle().fill(Color.blue).frame(width: 28, height: 28)
+            Circle().fill(Color.appAccent).frame(width: 28, height: 28)
             Image(systemName: "sparkles").font(.system(size: 12)).foregroundColor(.white)
         }
     }
@@ -198,11 +198,11 @@ struct MessageBubble: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
-                .background(Color.blue)
+                .background(Color.appAccent)
                 .cornerRadius(18)
             } else {
                 ZStack {
-                    Circle().fill(Color.blue).frame(width: 28, height: 28)
+                    Circle().fill(Color.appAccent).frame(width: 28, height: 28)
                     Image(systemName: "sparkles").font(.system(size: 12)).foregroundColor(.white)
                 }
                 SelectableTextView(
