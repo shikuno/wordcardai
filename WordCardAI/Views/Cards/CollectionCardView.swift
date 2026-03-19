@@ -275,14 +275,10 @@ struct CollectionCardView: View {
                 Spacer()
                 if showingBack {
                     adaptiveText(card.english, maxLength: 60)
-                        .foregroundColor(.primary)
-                        .multilineTextAlignment(.center)
                         .padding(.horizontal, 24)
                         .opacity(isCurrent ? 1.0 : 0.4)
                 } else {
                     adaptiveText(card.japanese, maxLength: 60)
-                        .foregroundColor(.primary)
-                        .multilineTextAlignment(.center)
                         .padding(.horizontal, 24)
                         .opacity(isCurrent ? 1.0 : 0.4)
                 }
@@ -328,22 +324,19 @@ struct CollectionCardView: View {
         .frame(width: cardWidth, height: 290)
     }
 
-    /// 文字数に応じてフォントサイズを自動調整するText
-    @ViewBuilder
+    /// 文字数に応じてフォントサイズを自動調整
     private func adaptiveText(_ text: String, maxLength: Int) -> some View {
         let len = text.count
-        let font: Font = len <= 20 ? .title.bold()
-                       : len <= 40 ? .title2.bold()
-                       : len <= 80 ? .title3.bold()
-                       :             .body.bold()
-        // U+0027（'）をU+2019（'）に置換してアポストロフィ起因の折り返しを防ぐ
-        let display = text.replacingOccurrences(of: "'", with: "\u{2019}")
-        Text(display)
-            .font(font)
-            .multilineTextAlignment(.center)
-            .lineLimit(6)
-            .minimumScaleFactor(0.5)
-            .allowsTightening(true)
+        let uiFont: UIFont = len <= 20 ? .boldSystemFont(ofSize: 28)
+                           : len <= 40 ? .boldSystemFont(ofSize: 22)
+                           : len <= 80 ? .boldSystemFont(ofSize: 18)
+                           :             .boldSystemFont(ofSize: 15)
+        CardTextLabel(
+            text: text,
+            font: uiFont,
+            color: .label,
+            alignment: .center
+        )
     }
 
     private func statusColor(_ status: LearningStatus) -> Color {

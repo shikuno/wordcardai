@@ -189,25 +189,33 @@ struct MessageBubble: View {
         HStack(alignment: .bottom, spacing: 8) {
             if isUser {
                 Spacer(minLength: 60)
-                Text(message.text)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(Color.blue)
-                    .foregroundColor(.white)
-                    .cornerRadius(18)
-                    .textSelection(.enabled)
+                SelectableTextView(
+                    text: message.text,
+                    font: .systemFont(ofSize: 16),
+                    textColor: .white,
+                    backgroundColor: .clear
+                )
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(Color.blue)
+                .cornerRadius(18)
             } else {
                 ZStack {
                     Circle().fill(Color.blue).frame(width: 28, height: 28)
                     Image(systemName: "sparkles").font(.system(size: 12)).foregroundColor(.white)
                 }
-                Text(.init(message.text))
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(Color(uiColor: .secondarySystemBackground))
-                    .foregroundColor(.primary)
-                    .cornerRadius(18)
-                    .textSelection(.enabled)
+                SelectableTextView(
+                    text: message.text,
+                    font: .systemFont(ofSize: 16),
+                    textColor: .label,
+                    backgroundColor: .clear
+                )
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(Color(uiColor: .secondarySystemBackground))
+                .cornerRadius(18)
                 Spacer(minLength: 60)
             }
         }
