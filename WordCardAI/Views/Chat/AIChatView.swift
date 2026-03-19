@@ -194,7 +194,7 @@ struct MessageBubble: View {
                     .padding(.vertical, 10)
                     .background(Color.blue)
                     .foregroundColor(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 18))
+                    .cornerRadius(18)
                     .textSelection(.enabled)
             } else {
                 ZStack {
@@ -206,7 +206,7 @@ struct MessageBubble: View {
                     .padding(.vertical, 10)
                     .background(Color(uiColor: .secondarySystemBackground))
                     .foregroundColor(.primary)
-                    .clipShape(RoundedRectangle(cornerRadius: 18))
+                    .cornerRadius(18)
                     .textSelection(.enabled)
                 Spacer(minLength: 60)
             }

@@ -176,6 +176,8 @@ struct CollectionCardView: View {
                 let progress: CGFloat = total > 1
                     ? CGFloat(playbackViewModel.currentIndex) / CGFloat(total - 1)
                     : 0
+                let thumbX = trackW * progress
+
                 ZStack(alignment: .leading) {
                     // トラック背景
                     Capsule()
@@ -184,12 +186,16 @@ struct CollectionCardView: View {
                     // 進捗バー
                     Capsule()
                         .fill(Color.secondary.opacity(0.4))
-                        .frame(width: trackW * progress, height: 3)
+                        .frame(width: thumbX, height: 3)
+                    // つまみ（小さい白丸）
+                    Circle()
+                        .fill(Color.white)
+                        .frame(width: 10, height: 10)
+                        .shadow(color: .black.opacity(0.2), radius: 2, y: 1)
+                        .offset(x: thumbX - 5)
                 }
-                .frame(height: 3)
-                .frame(maxWidth: .infinity)
-                // タップ・ドラッグで位置変更（タッチ領域を上下に広げる）
-                .contentShape(Rectangle().inset(by: -12))
+                .frame(height: 10)
+                .contentShape(Rectangle().inset(by: -10))
                 .gesture(
                     DragGesture(minimumDistance: 0)
                         .onChanged { val in
@@ -201,7 +207,7 @@ struct CollectionCardView: View {
                         }
                 )
             }
-            .frame(height: 3)
+            .frame(height: 10)
             // 枚数表示（スライダー下・中央）
             Text(playbackViewModel.progressText)
                 .font(.caption2.monospacedDigit())
@@ -330,14 +336,14 @@ struct CollectionCardView: View {
                        : len <= 40 ? .title2.bold()
                        : len <= 80 ? .title3.bold()
                        :             .body.bold()
-        // U+0027（'）をU+2019（'）に置換 → SwiftUIがアポストロフィ前後で
-        // 不正な折り返しをするのを防ぐ
+        // U+0027（'）をU+2019（'）に置換してアポストロフィ起因の折り返しを防ぐ
         let display = text.replacingOccurrences(of: "'", with: "\u{2019}")
         Text(display)
             .font(font)
             .multilineTextAlignment(.center)
-            .lineLimit(nil)
-            .fixedSize(horizontal: false, vertical: true)
+            .lineLimit(6)
+            .minimumScaleFactor(0.5)
+            .allowsTightening(true)
     }
 
     private func statusColor(_ status: LearningStatus) -> Color {
