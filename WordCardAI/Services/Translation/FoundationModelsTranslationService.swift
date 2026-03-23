@@ -2,80 +2,146 @@ import Foundation
 #if canImport(FoundationModels)
 import FoundationModels
 #endif
+#if canImport(Translation)
+import Translation
+#endif
 
 class FoundationModelsTranslationService: TranslationServiceProtocol {
 
-    /// デバッグ用：最後の入力・プロンプト・生出力を保持
-    static var lastRawInput: String = "(まだ生成していません)"
-    static var lastPrompt: String = "(まだ生成していません)"
+    // MARK: - デバッグ用ログ
+    static var lastRawInput:  String = "(まだ生成していません)"
+    static var lastPrompt:    String = "(まだ生成していません)"
     static var lastRawOutput: String = "(まだ生成していません)"
-    
-    func generateCandidates(from japanese: String, count: Int) async throws -> [String] {
-        // 改行・タブ・連続スペースをすべて半角スペース1つに正規化して1行にする
-        let trimmed = japanese
-            .components(separatedBy: .whitespacesAndNewlines)
-            .filter { !$0.isEmpty }
-            .joined(separator: " ")
-        guard !trimmed.isEmpty else {
-            throw TranslationError.emptyInput
-        }
-        
-        let prompt = """
-        Translate the following Japanese into exactly \(count) English sentences.
-        Write only the \(count) sentences, one per line, nothing else.
-        Japanese: \(trimmed)
-        """
 
-        // デバッグ用：入力とプロンプトを保存
+    // MARK: - Step 1: 翻訳（Translation Framework → LLM フォールバック）
+
+    func translateOnce(text: String, targetLanguage: String = "en") async throws -> String {
+        let trimmed = normalize(text)
+        guard !trimmed.isEmpty else { throw TranslationError.emptyInput }
         FoundationModelsTranslationService.lastRawInput = trimmed
-        FoundationModelsTranslationService.lastPrompt = prompt
-        
-        #if canImport(FoundationModels)
-        if #available(iOS 18.2, *) {
-            do {
-                let session = LanguageModelSession(
-                    instructions: "You are a professional translator. Output only the requested sentences, one per line, no numbering, no explanation."
-                )
-                let response = try await session.respond(to: prompt)
-                let text = response.content
-                // デバッグ用：生出力をそのまま保存（加工なし）
-                FoundationModelsTranslationService.lastRawOutput = text
-                
-                // 改行で分割してそのまま返す
-                let lines = text
-                    .components(separatedBy: .newlines)
-                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                    .filter { !$0.isEmpty }
-                
-                // 番号「1. 」「1) 」だけ除去（最小限）
-                let cleaned = lines.map { line -> String in
-                    var s = line
-                    if let r = try? NSRegularExpression(pattern: "^\\d+[.)\\s]+") {
-                        s = r.stringByReplacingMatches(in: s, range: NSRange(s.startIndex..., in: s), withTemplate: "")
-                    }
-                    return s.trimmingCharacters(in: .whitespacesAndNewlines)
-                }.filter { !$0.isEmpty }
-                
-                guard !cleaned.isEmpty else { throw TranslationError.processingError }
-                
-                // 足りなければ末尾を繰り返す、多ければ切る
-                var result = cleaned
-                while result.count < count { result.append(result.last ?? "") }
-                return Array(result.prefix(count))
-                
-            } catch {
-                throw error
+
+        // ① Apple Translation Framework を試みる
+        #if canImport(Translation)
+        if #available(iOS 17.4, *) {
+            if let result = try? await translateWithFramework(text: trimmed, targetLanguage: targetLanguage) {
+                return result
             }
         }
         #endif
-        throw TranslationError.processingError
+
+        // ② フォールバック: LLM で翻訳
+        return try await translateWithLLM(text: trimmed, targetLanguage: targetLanguage)
     }
-    
-    // 英文っぽいかどうかの判定（最小限）
-    private static func isLikelyEnglishSentence(_ text: String) -> Bool {
-        guard !text.isEmpty, text.count >= 2 else { return false }
-        let jpChars = CharacterSet(charactersIn: "ぁ-んァ-ヴ一-龠々〆")
-        let jpCount = text.unicodeScalars.filter { jpChars.contains($0) }.count
-        return jpCount == 0
+
+    // MARK: - Step 2: 自然な表現を N 件生成（LLM のみ）
+
+    func generateNaturalExpressions(from translated: String, count: Int) async throws -> [String] {
+        let trimmed = normalize(translated)
+        guard !trimmed.isEmpty else { throw TranslationError.emptyInput }
+
+        #if canImport(FoundationModels)
+        if #available(iOS 18.2, *) {
+            let prompt = """
+            Give me exactly \(count) natural, native-sounding expressions or paraphrases for the following phrase.
+            Write only the \(count) expressions, one per line, no numbering, no explanation.
+            Phrase: \(trimmed)
+            """
+            FoundationModelsTranslationService.lastPrompt = prompt
+
+            let session = LanguageModelSession(
+                instructions: "You are a native English speaker. Output only the requested expressions, one per line."
+            )
+            let response = try await session.respond(to: prompt)
+            let raw = response.content
+            FoundationModelsTranslationService.lastRawOutput = raw
+
+            let lines = parseLines(raw, expected: count)
+            guard !lines.isEmpty else { throw TranslationError.processingError }
+            return lines
+        }
+        #endif
+        throw TranslationError.unavailable
+    }
+
+    // MARK: - Private: Translation Framework
+
+    #if canImport(Translation)
+    @available(iOS 17.4, *)
+    private func translateWithFramework(text: String, targetLanguage: String) async throws -> String? {
+        do {
+            let targetLocale = Locale.Language(identifier: targetLanguage)
+            // installedSource: nil の場合は自動検出（iOS 26+ のみ）
+            // iOS 17.4〜25 では source を指定する必要があるが、ここでは iOS 26+ 向け実装とする
+            if #available(iOS 26.0, *) {
+                let session = TranslationSession(
+                    installedSource: Locale.Language(identifier: "ja"),
+                    target: targetLocale
+                )
+                let response = try await session.translate(text)
+                return response.targetText
+            }
+            return nil
+        } catch {
+            // 言語パック未インストール等でエラー → nil を返して LLM にフォールバック
+            return nil
+        }
+    }
+    #endif
+
+    // MARK: - Private: LLM 翻訳
+
+    private func translateWithLLM(text: String, targetLanguage: String) async throws -> String {
+        #if canImport(FoundationModels)
+        if #available(iOS 18.2, *) {
+            let langName = Locale.current.localizedString(forLanguageCode: targetLanguage) ?? targetLanguage
+            let prompt = """
+            Translate the following text into \(langName).
+            Write only the translation, nothing else.
+            Text: \(text)
+            """
+            FoundationModelsTranslationService.lastPrompt = prompt
+
+            let session = LanguageModelSession(
+                instructions: "You are a professional translator. Output only the translation."
+            )
+            let response = try await session.respond(to: prompt)
+            let result = response.content
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            FoundationModelsTranslationService.lastRawOutput = result
+            guard !result.isEmpty else { throw TranslationError.processingError }
+            return result
+        }
+        #endif
+        throw TranslationError.unavailable
+    }
+
+    // MARK: - Private: ユーティリティ
+
+    /// 改行・連続スペースを1スペースに正規化
+    private func normalize(_ text: String) -> String {
+        text.components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+    }
+
+    /// レスポンスを行に分割し、番号記号を除去して返す
+    private func parseLines(_ raw: String, expected: Int) -> [String] {
+        let numberPattern = try? NSRegularExpression(pattern: #"^\d+[.)]\s*"#)
+        var lines = raw
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .map { line -> String in
+                var s = line
+                if let r = numberPattern {
+                    s = r.stringByReplacingMatches(in: s, range: NSRange(s.startIndex..., in: s), withTemplate: "")
+                }
+                return s.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            .filter { !$0.isEmpty }
+
+        // 不足なら末尾を繰り返し、多ければ切る
+        while lines.count < expected { lines.append(lines.last ?? "") }
+        return Array(lines.prefix(expected))
     }
 }

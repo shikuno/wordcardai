@@ -3,71 +3,67 @@ import Foundation
 class OpenAITranslationService: TranslationServiceProtocol {
     private let apiKey: String
     private let baseURL = "https://api.openai.com/v1/chat/completions"
-    
+
     init(apiKey: String) {
         self.apiKey = apiKey
     }
-    
-    func generateCandidates(from japanese: String, count: Int) async throws -> [String] {
-        guard !japanese.isEmpty else {
-            throw TranslationError.emptyInput
-        }
-        
-        // OpenAI API リクエストの構築
+
+    // MARK: - Step 1: 翻訳（1件）
+
+    func translateOnce(text: String, targetLanguage: String) async throws -> String {
+        guard !text.isEmpty else { throw TranslationError.emptyInput }
+        let langName = Locale.current.localizedString(forLanguageCode: targetLanguage) ?? targetLanguage
+        let prompt = "Translate the following text into \(langName). Write only the translation.\nText: \(text)"
+        let results = try await callAPI(prompt: prompt, count: 1)
+        guard let first = results.first else { throw TranslationError.processingError }
+        return first
+    }
+
+    // MARK: - Step 2: 自然な表現を N 件生成
+
+    func generateNaturalExpressions(from translated: String, count: Int) async throws -> [String] {
+        guard !translated.isEmpty else { throw TranslationError.emptyInput }
         let prompt = """
-        Translate the following Japanese phrase to natural English. 
-        Provide \(count) different variations (formal, casual, common usage).
-        Only respond with the English translations, one per line.
-        
-        Japanese: \(japanese)
+        Give me exactly \(count) natural, native-sounding expressions or paraphrases for: \(translated)
+        Write only the \(count) expressions, one per line, no numbering.
         """
-        
-        let messages = [
-            ["role": "system", "content": "You are a professional Japanese to English translator."],
+        return try await callAPI(prompt: prompt, count: count)
+    }
+
+    // MARK: - Private
+
+    private func callAPI(prompt: String, count: Int) async throws -> [String] {
+        let messages: [[String: Any]] = [
+            ["role": "system", "content": "You are a professional translator and native English speaker."],
             ["role": "user", "content": prompt]
         ]
-        
         let requestBody: [String: Any] = [
             "model": "gpt-4o-mini",
             "messages": messages,
             "temperature": 0.7,
-            "max_tokens": 200
+            "max_tokens": 300
         ]
-        
-        // API リクエスト
-        guard let url = URL(string: baseURL) else {
-            throw TranslationError.processingError
-        }
-        
+        guard let url = URL(string: baseURL) else { throw TranslationError.processingError }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
-        
+
         let (data, response) = try await URLSession.shared.data(for: request)
-        
-        guard let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 200 else {
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             throw TranslationError.networkError
         }
-        
-        // レスポンスのパース
-        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let choices = json["choices"] as? [[String: Any]],
-              let firstChoice = choices.first,
-              let message = firstChoice["message"] as? [String: Any],
+              let message = choices.first?["message"] as? [String: Any],
               let content = message["content"] as? String else {
             throw TranslationError.processingError
         }
-        
-        // 改行で分割して候補を取得
-        let candidates = content
+        let lines = content
             .components(separatedBy: .newlines)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
-            .prefix(count)
-        
-        return Array(candidates)
+        return Array(lines.prefix(count))
     }
 }

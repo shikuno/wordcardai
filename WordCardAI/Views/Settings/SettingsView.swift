@@ -42,7 +42,7 @@ struct SettingsView: View {
     
     private var aiSettingsSection: some View {
         Section {
-            Picker("候補数", selection: $settingsService.settings.candidateCount) {
+            Picker("自然な表現の候補数", selection: $settingsService.settings.candidateCount) {
                 ForEach(1...5, id: \.self) { count in
                     Text("\(count)件").tag(count)
                 }
@@ -53,7 +53,7 @@ struct SettingsView: View {
         } header: {
             Text("AI設定")
         } footer: {
-            Text("日本語入力時に生成する英語候補の数を設定します")
+            Text("「自然な表現を見る」で生成するネイティブ表現の候補数を設定します")
         }
     }
     

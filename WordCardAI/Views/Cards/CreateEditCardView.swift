@@ -13,9 +13,10 @@ struct CreateEditCardView: View {
     let card: WordCard?
     private let isEditing: Bool
 
-    enum Field {
-        case japanese, english, note
-    }
+    @State private var debugTapCount = 0
+    @State private var showDebugAlert = false
+
+    enum Field { case input, english, note }
 
     init(collection: CardCollection, cardsViewModel: CardsViewModel, settingsService: SettingsService, card: WordCard?) {
         self.collection = collection
@@ -26,17 +27,24 @@ struct CreateEditCardView: View {
 
         _viewModel = StateObject(wrappedValue: CreateCardViewModel(
             translationService: TranslationServiceFactory.createService(settings: settingsService.settings),
-            candidateCount: settingsService.settings.candidateCount
+            naturalExpressionCount: settingsService.settings.candidateCount
         ))
     }
 
     var body: some View {
         NavigationStack {
             Form {
-                japaneseSection
-                generateButton
-                englishSection
-                candidatesSection
+                inputSection
+                step1Button
+                if !viewModel.english.isEmpty {
+                    englishSection
+                }
+                if viewModel.canGenerateExpressions {
+                    step2Button
+                }
+                if !viewModel.naturalExpressions.isEmpty {
+                    naturalExpressionsSection
+                }
                 optionalFieldsSection
             }
             .navigationTitle(isEditing ? "カード編集" : "カード作成")
@@ -45,142 +53,162 @@ struct CreateEditCardView: View {
             #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("キャンセル") {
-                        dismiss()
-                    }
+                    Button("キャンセル") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") {
-                        saveCard()
-                    }
-                    .disabled(!viewModel.isValid)
+                    Button("保存") { saveCard() }
+                        .disabled(!viewModel.isValid)
                 }
             }
             .onAppear {
-                if let card = card {
-                    viewModel.loadCard(card)
-                }
-                focusedField = .japanese
+                if let card { viewModel.loadCard(card) }
+                focusedField = .input
             }
-            .onDisappear {
-                speechService.stop()
-            }
+            .onDisappear { speechService.stop() }
             .alert("エラー", isPresented: .constant(viewModel.errorMessage != nil)) {
-                Button("OK") {
-                    viewModel.errorMessage = nil
-                }
+                Button("OK") { viewModel.errorMessage = nil }
             } message: {
-                if let error = viewModel.errorMessage {
-                    Text(error)
-                }
+                if let error = viewModel.errorMessage { Text(error) }
             }
         }
     }
 
-    private var japaneseSection: some View {
+    // MARK: - 入力セクション
+
+    private var inputSection: some View {
         Section {
-            TextField("日本語を入力", text: $viewModel.japanese, axis: .vertical)
-                .focused($focusedField, equals: .japanese)
+            TextField("テキストを入力", text: $viewModel.inputText, axis: .vertical)
+                .focused($focusedField, equals: .input)
                 .lineLimit(3...6)
 
             Button {
-                speechService.speak(viewModel.japanese)
+                speechService.speak(viewModel.inputText)
             } label: {
-                Label("日本語を再生", systemImage: "speaker.wave.2.fill")
+                Label("読み上げ", systemImage: "speaker.wave.2.fill")
             }
-            .disabled(viewModel.japanese.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .disabled(viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         } header: {
-            Text("日本語 *")
+            Text("入力テキスト *")
+        } footer: {
+            Text("日本語・英語など言語は問いません")
         }
     }
 
-    private var generateButton: some View {
+    // MARK: - Step1: 翻訳ボタン
+
+    private var step1Button: some View {
         Section {
-            Button(action: { generateCandidates() }) {
+            Button {
+                focusedField = nil
+                Task { await viewModel.translateOnce() }
+            } label: {
                 HStack {
-                    if viewModel.isGenerating {
-                        ProgressView()
-                            .padding(.trailing, 4)
+                    if viewModel.isTranslating {
+                        ProgressView().padding(.trailing, 4)
+                        Text("翻訳中...")
                     } else {
-                        Image(systemName: "lightbulb.fill")
+                        Image(systemName: "globe")
+                        Text("翻訳する")
                     }
-                    Text(viewModel.isGenerating ? "生成中..." : "候補を生成")
-                        .font(.headline)
                 }
+                .font(.headline)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 8)
             }
-            .disabled(viewModel.japanese.isEmpty || viewModel.isGenerating)
+            .disabled(viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || viewModel.isTranslating)
         }
     }
 
+    // MARK: - 英語セクション（Step1 完了後に表示）
+
     private var englishSection: some View {
         Section {
-            TextField("英語を入力または候補から選択", text: $viewModel.english, axis: .vertical)
+            TextField("翻訳結果", text: $viewModel.english, axis: .vertical)
                 .focused($focusedField, equals: .english)
                 .lineLimit(3...6)
 
             Button {
                 speechService.speak(viewModel.english)
             } label: {
-                Label("英語を再生", systemImage: "speaker.wave.2")
+                Label("読み上げ", systemImage: "speaker.wave.2")
             }
             .disabled(viewModel.english.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         } header: {
-            Text("英語 *")
+            Text("翻訳結果 *")
         } footer: {
-            Text("候補から選択するか、直接編集できます")
+            Text("直接編集もできます")
         }
     }
 
-    @State private var debugTapCount = 0
-    @State private var showDebugAlert = false
+    // MARK: - Step2: 自然な表現ボタン
 
-    @ViewBuilder
-    private var candidatesSection: some View {
-        if !viewModel.candidates.isEmpty {
-            Section {
-                ForEach(Array(viewModel.candidates.enumerated()), id: \.offset) { index, candidate in
-                    Button(action: {
-                        viewModel.selectCandidate(at: index)
-                        // 2番目（index==1）を10回連続タップでデバッグ表示
-                        if index == 1 {
-                            debugTapCount += 1
-                            if debugTapCount >= 10 {
-                                debugTapCount = 0
-                                showDebugAlert = true
-                            }
-                        } else {
-                            debugTapCount = 0
-                        }
-                    }) {
-                        HStack {
-                            Text(candidate)
-                                .foregroundColor(.primary)
-                            Spacer()
-                            if viewModel.selectedCandidateIndex == index {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundColor(.appAccent)
-                            } else {
-                                Image(systemName: "circle")
-                                    .foregroundColor(.gray)
-                            }
-                        }
+    private var step2Button: some View {
+        Section {
+            Button {
+                focusedField = nil
+                Task { await viewModel.generateNaturalExpressions() }
+            } label: {
+                HStack {
+                    if viewModel.isGeneratingExpressions {
+                        ProgressView().padding(.trailing, 4)
+                        Text("生成中...")
+                    } else {
+                        Image(systemName: "sparkles")
+                        Text("自然な表現を見る（\(settingsService.settings.candidateCount)件）")
                     }
                 }
-            } header: {
-                Text("AI候補")
+                .font(.subheadline)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 6)
             }
-            .alert("AI生出力（デバッグ）", isPresented: $showDebugAlert) {
-                Button("コピー") {
-                    UIPasteboard.general.string = viewModel.rawAIOutput ?? "(なし)"
-                }
-                Button("閉じる", role: .cancel) {}
-            } message: {
-                Text(viewModel.rawAIOutput ?? "(まだ生成していません)")
-            }
+            .disabled(viewModel.isGeneratingExpressions)
+        } footer: {
+            Text("AIがネイティブらしい言い回しを提案します")
         }
     }
+
+    // MARK: - 自然な表現一覧（Step2 完了後に表示）
+
+    @ViewBuilder
+    private var naturalExpressionsSection: some View {
+        Section {
+            ForEach(Array(viewModel.naturalExpressions.enumerated()), id: \.offset) { index, expr in
+                Button {
+                    viewModel.selectExpression(at: index)
+                    // 2番目を10回連続タップでデバッグ表示
+                    if index == 1 {
+                        debugTapCount += 1
+                        if debugTapCount >= 10 {
+                            debugTapCount = 0
+                            showDebugAlert = true
+                        }
+                    } else {
+                        debugTapCount = 0
+                    }
+                } label: {
+                    HStack {
+                        Text(expr).foregroundColor(.primary)
+                        Spacer()
+                        Image(systemName: viewModel.selectedExpressionIndex == index
+                              ? "checkmark.circle.fill" : "circle")
+                            .foregroundColor(viewModel.selectedExpressionIndex == index ? .blue : .gray)
+                    }
+                }
+            }
+        } header: {
+            Text("自然な表現（AI候補）")
+        }
+        .alert("AI生出力（デバッグ）", isPresented: $showDebugAlert) {
+            Button("コピー") {
+                UIPasteboard.general.string = viewModel.rawAIOutput ?? "(なし)"
+            }
+            Button("閉じる", role: .cancel) {}
+        } message: {
+            Text(viewModel.rawAIOutput ?? "(まだ生成していません)")
+        }
+    }
+
+    // MARK: - オプション欄
 
     private var optionalFieldsSection: some View {
         Section {
@@ -192,17 +220,12 @@ struct CreateEditCardView: View {
         }
     }
 
-    private func generateCandidates() {
-        focusedField = nil
-        Task {
-            await viewModel.generateCandidates()
-        }
-    }
+    // MARK: - 保存
 
     private func saveCard() {
         if isEditing, let existingCard = card {
-            let updatedCard = viewModel.updateCard(existingCard)
-            cardsViewModel.updateCard(updatedCard)
+            let updated = viewModel.updateCard(existingCard)
+            cardsViewModel.updateCard(updated)
         } else {
             if let newCard = viewModel.createCard(for: collection.id) {
                 cardsViewModel.createCard(newCard)
