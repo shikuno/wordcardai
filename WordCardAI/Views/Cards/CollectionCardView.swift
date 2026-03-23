@@ -228,10 +228,17 @@ struct CollectionCardView: View {
             let stride = cardWidth + gap
             let baseOffset = (geometry.size.width - cardWidth) / 2
             let scrollOffset = baseOffset - CGFloat(playbackViewModel.currentIndex) * stride
+            let renderWindow = 3 // 前後3枚まで描画して軽量化
 
             HStack(spacing: gap) {
                 ForEach(Array(playbackViewModel.cards.enumerated()), id: \.offset) { idx, card in
-                    cardCell(card: card, idx: idx, cardWidth: cardWidth, isCurrent: idx == playbackViewModel.currentIndex)
+                    if abs(idx - playbackViewModel.currentIndex) <= renderWindow {
+                        cardCell(card: card, idx: idx, cardWidth: cardWidth, isCurrent: idx == playbackViewModel.currentIndex)
+                    } else {
+                        // 画面外はレイアウト確保だけの透明ビューにする
+                        Color.clear
+                            .frame(width: cardWidth, height: 290)
+                    }
                 }
             }
             .offset(x: scrollOffset + dragOffset)

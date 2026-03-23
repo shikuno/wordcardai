@@ -15,7 +15,7 @@ class FoundationModelsTranslationService: TranslationServiceProtocol {
 
     // MARK: - Step 1: 翻訳（Translation Framework → LLM フォールバック）
 
-    func translateOnce(text: String, targetLanguage: String = "en") async throws -> String {
+    func translateOnce(text: String, sourceLanguage: String = "ja", targetLanguage: String = "en") async throws -> String {
         let trimmed = normalize(text)
         guard !trimmed.isEmpty else { throw TranslationError.emptyInput }
         FoundationModelsTranslationService.lastRawInput = trimmed
@@ -23,7 +23,7 @@ class FoundationModelsTranslationService: TranslationServiceProtocol {
         // ① Apple Translation Framework を試みる
         #if canImport(Translation)
         if #available(iOS 17.4, *) {
-            if let result = try? await translateWithFramework(text: trimmed, targetLanguage: targetLanguage) {
+            if let result = try? await translateWithFramework(text: trimmed, sourceLanguage: sourceLanguage, targetLanguage: targetLanguage) {
                 return result
             }
         }
@@ -35,7 +35,7 @@ class FoundationModelsTranslationService: TranslationServiceProtocol {
 
     // MARK: - Step 2: 自然な表現を N 件生成（LLM のみ）
 
-    func generateNaturalExpressions(from translated: String, count: Int) async throws -> [String] {
+    func generateNaturalExpressions(from translated: String, targetLanguage: String = "en", count: Int) async throws -> [String] {
         let trimmed = normalize(translated)
         guard !trimmed.isEmpty else { throw TranslationError.emptyInput }
 
@@ -67,14 +67,12 @@ class FoundationModelsTranslationService: TranslationServiceProtocol {
 
     #if canImport(Translation)
     @available(iOS 17.4, *)
-    private func translateWithFramework(text: String, targetLanguage: String) async throws -> String? {
+    private func translateWithFramework(text: String, sourceLanguage: String, targetLanguage: String) async throws -> String? {
         do {
             let targetLocale = Locale.Language(identifier: targetLanguage)
-            // installedSource: nil の場合は自動検出（iOS 26+ のみ）
-            // iOS 17.4〜25 では source を指定する必要があるが、ここでは iOS 26+ 向け実装とする
             if #available(iOS 26.0, *) {
                 let session = TranslationSession(
-                    installedSource: Locale.Language(identifier: "ja"),
+                    installedSource: Locale.Language(identifier: sourceLanguage),
                     target: targetLocale
                 )
                 let response = try await session.translate(text)
@@ -82,7 +80,6 @@ class FoundationModelsTranslationService: TranslationServiceProtocol {
             }
             return nil
         } catch {
-            // 言語パック未インストール等でエラー → nil を返して LLM にフォールバック
             return nil
         }
     }

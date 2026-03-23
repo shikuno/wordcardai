@@ -42,6 +42,24 @@ struct SettingsView: View {
     
     private var aiSettingsSection: some View {
         Section {
+            Picker("表面の言語", selection: $settingsService.settings.frontLanguage) {
+                ForEach(supportedLanguageCodes, id: \.code) { lang in
+                    Text(lang.label).tag(lang.code)
+                }
+            }
+            .onChange(of: settingsService.settings.frontLanguage) { _, newValue in
+                settingsService.updateFrontLanguage(newValue)
+            }
+
+            Picker("裏面の言語", selection: $settingsService.settings.backLanguage) {
+                ForEach(supportedLanguageCodes, id: \.code) { lang in
+                    Text(lang.label).tag(lang.code)
+                }
+            }
+            .onChange(of: settingsService.settings.backLanguage) { _, newValue in
+                settingsService.updateBackLanguage(newValue)
+            }
+
             Picker("自然な表現の候補数", selection: $settingsService.settings.candidateCount) {
                 ForEach(1...5, id: \.self) { count in
                     Text("\(count)件").tag(count)
@@ -53,9 +71,15 @@ struct SettingsView: View {
         } header: {
             Text("AI設定")
         } footer: {
-            Text("「自然な表現を見る」で生成するネイティブ表現の候補数を設定します")
+            Text("カード作成画面での翻訳方向のデフォルト言語を設定します。「自然な表現を見る」の候補数も変更できます")
         }
     }
+
+    private let supportedLanguageCodes: [(code: String, label: String)] = [
+        ("ja", "日本語"), ("en", "英語"), ("zh", "中国語"), ("ko", "韓国語"),
+        ("fr", "フランス語"), ("de", "ドイツ語"), ("es", "スペイン語"),
+        ("it", "イタリア語"), ("pt", "ポルトガル語"), ("ru", "ロシア語"),
+    ]
     
     private var dataSection: some View {
         Section {

@@ -65,4 +65,16 @@ class SettingsService: ObservableObject {
         newSettings.hasSeenCardFlipHint = hasSeen
         updateSettings(newSettings)
     }
+
+    func updateFrontLanguage(_ code: String) {
+        var newSettings = settings
+        newSettings.frontLanguage = code
+        updateSettings(newSettings)
+    }
+
+    func updateBackLanguage(_ code: String) {
+        var newSettings = settings
+        newSettings.backLanguage = code
+        updateSettings(newSettings)
+    }
 }

@@ -14,6 +14,10 @@ struct AppSettings: Codable {
     var playbackAutoAdvanceDelay: Double
     var playbackFrontToBackDelay: Double
     var hasSeenCardFlipHint: Bool
+    /// 表面の言語コード（例: "ja", "en"）
+    var frontLanguage: String
+    /// 裏面の言語コード（例: "en", "ja"）
+    var backLanguage: String
 
     init(
         candidateCount: Int = 3,
@@ -21,7 +25,9 @@ struct AppSettings: Codable {
         playbackSpeechTargetRawValue: String = "frontOnly",
         playbackAutoAdvanceDelay: Double = 2.0,
         playbackFrontToBackDelay: Double = 1.0,
-        hasSeenCardFlipHint: Bool = false
+        hasSeenCardFlipHint: Bool = false,
+        frontLanguage: String = "ja",
+        backLanguage: String = "en"
     ) {
         self.candidateCount = min(max(candidateCount, 1), 5)
         self.playbackRate = min(max(playbackRate, 0.25), 2.0)
@@ -29,5 +35,7 @@ struct AppSettings: Codable {
         self.playbackAutoAdvanceDelay = min(max(playbackAutoAdvanceDelay, 0), 10)
         self.playbackFrontToBackDelay = min(max(playbackFrontToBackDelay, 0), 10)
         self.hasSeenCardFlipHint = hasSeenCardFlipHint
+        self.frontLanguage = frontLanguage
+        self.backLanguage = backLanguage
     }
 }

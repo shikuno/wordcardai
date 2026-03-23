@@ -1,4 +1,3 @@
-
 //
 //  CSVService.swift
 //  WordCardAI
@@ -92,8 +91,8 @@ struct CSVService {
             cards.append(
                 WordCard(
                     collectionId: collectionId,
-                    japanese: japanese,
-                    english: english,
+                    front: japanese,
+                    back: english,
                     note: note,
                     tags: tags
                 )

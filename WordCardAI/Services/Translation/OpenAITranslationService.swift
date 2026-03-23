@@ -10,7 +10,7 @@ class OpenAITranslationService: TranslationServiceProtocol {
 
     // MARK: - Step 1: 翻訳（1件）
 
-    func translateOnce(text: String, targetLanguage: String) async throws -> String {
+    func translateOnce(text: String, sourceLanguage: String, targetLanguage: String) async throws -> String {
         guard !text.isEmpty else { throw TranslationError.emptyInput }
         let langName = Locale.current.localizedString(forLanguageCode: targetLanguage) ?? targetLanguage
         let prompt = "Translate the following text into \(langName). Write only the translation.\nText: \(text)"
@@ -21,10 +21,11 @@ class OpenAITranslationService: TranslationServiceProtocol {
 
     // MARK: - Step 2: 自然な表現を N 件生成
 
-    func generateNaturalExpressions(from translated: String, count: Int) async throws -> [String] {
+    func generateNaturalExpressions(from translated: String, targetLanguage: String, count: Int) async throws -> [String] {
         guard !translated.isEmpty else { throw TranslationError.emptyInput }
+        let langName = Locale.current.localizedString(forLanguageCode: targetLanguage) ?? targetLanguage
         let prompt = """
-        Give me exactly \(count) natural, native-sounding expressions or paraphrases for: \(translated)
+        Give me exactly \(count) natural, native-sounding \(langName) expressions or paraphrases for: \(translated)
         Write only the \(count) expressions, one per line, no numbering.
         """
         return try await callAPI(prompt: prompt, count: count)

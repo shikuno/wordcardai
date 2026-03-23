@@ -478,7 +478,7 @@ struct LearnModeView: View {
 
 #Preview {
     LearnModeView(cards: [
-        WordCard(collectionId: UUID(), japanese: "おはよう", english: "Good morning"),
-        WordCard(collectionId: UUID(), japanese: "ありがとう", english: "Thank you"),
+        WordCard(collectionId: UUID(), front: "おはよう", back: "Good morning"),
+        WordCard(collectionId: UUID(), front: "ありがとう", back: "Thank you"),
     ])
 }
