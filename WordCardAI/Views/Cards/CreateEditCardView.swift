@@ -32,7 +32,6 @@ struct CreateEditCardView: View {
 
     @State private var debugTapCount = 0
     @State private var showDebugAlert = false
-    @State private var showLanguagePicker = false
 
     enum Field { case front, back, note }
 
@@ -54,31 +53,28 @@ struct CreateEditCardView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                languageHeaderSection
-                frontSection
-                translateButtonSection
-                if !viewModel.back.isEmpty || !viewModel.front.isEmpty {
-                    backSection
+            ScrollView {
+                VStack(spacing: 20) {
+                    frontCard
+                    backCard
+                    if !viewModel.naturalExpressions.isEmpty {
+                        naturalExpressionsCard
+                    }
+                    noteField
                 }
-                if viewModel.canGenerateExpressions {
-                    naturalExpressionsButtonSection
-                }
-                if !viewModel.naturalExpressions.isEmpty {
-                    naturalExpressionsSection
-                }
-                optionalFieldsSection
+                .padding(.horizontal, 16)
+                .padding(.vertical, 20)
             }
+            .background(Color(uiColor: .systemGroupedBackground))
             .navigationTitle(isEditing ? "カード編集" : "カード作成")
-            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
-            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("キャンセル") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("保存") { saveCard() }
+                        .fontWeight(.semibold)
                         .disabled(!viewModel.isValid)
                 }
             }
@@ -94,227 +90,261 @@ struct CreateEditCardView: View {
         }
     }
 
-    // MARK: - 言語設定ヘッダー
+    // MARK: - 表面カード
 
-    private var languageHeaderSection: some View {
-        Section {
-            // 表面言語 ⇄ 裏面言語
-            HStack(spacing: 0) {
-                languageTag(
-                    label: "表面",
-                    language: viewModel.frontLanguage,
-                    color: .blue
-                ) { code in
-                    viewModel.frontLanguage = code
-                    settingsService.updateFrontLanguage(code)
-                }
-
-                Spacer()
-
-                // 翻訳方向トグルボタン
-                Button {
-                    withAnimation(.spring(response: 0.3)) {
-                        viewModel.toggleDirection()
-                    }
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "arrow.left.arrow.right")
-                            .font(.system(size: 13, weight: .semibold))
-                        Text(viewModel.translateFrontToBack ? "表→裏" : "裏→表")
-                            .font(.caption.weight(.semibold))
-                    }
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Color.blue)
-                    .clipShape(Capsule())
-                }
-                .buttonStyle(.plain)
-
-                Spacer()
-
-                languageTag(
-                    label: "裏面",
-                    language: viewModel.backLanguage,
-                    color: .orange
-                ) { code in
-                    viewModel.backLanguage = code
-                    settingsService.updateBackLanguage(code)
-                }
+    private var frontCard: some View {
+        cardContainer {
+            // ヘッダー：「表面」ラベル ＋ 言語選択
+            cardHeader(title: "表面", langCode: viewModel.frontLanguage) { code in
+                viewModel.frontLanguage = code
+                settingsService.updateFrontLanguage(code)
             }
-            .padding(.vertical, 4)
-        } header: {
-            Text("言語設定")
-        } footer: {
-            Text("翻訳方向ボタンで表面↔裏面の翻訳元を切り替えられます")
+
+            // 入力欄（大きめ）
+            TextField("ここに入力してください", text: $viewModel.front, axis: .vertical)
+                .focused($focusedField, equals: .front)
+                .lineLimit(4...10)
+                .font(.body)
+                .padding(.top, 4)
+
+            Divider().padding(.top, 8)
+
+            // 翻訳ボタン（入力欄の直下）
+            translateFromFrontButton
         }
     }
 
-    @ViewBuilder
-    private func languageTag(label: String, language: String, color: Color, onSelect: @escaping (String) -> Void) -> some View {
-        Menu {
-            ForEach(supportedLanguages, id: \.code) { lang in
-                Button(lang.label) { onSelect(lang.code) }
+    // MARK: - 裏面カード
+
+    private var backCard: some View {
+        cardContainer {
+            // ヘッダー：「裏面」ラベル ＋ 言語選択
+            cardHeader(title: "裏面", langCode: viewModel.backLanguage) { code in
+                viewModel.backLanguage = code
+                settingsService.updateBackLanguage(code)
             }
+
+            // 入力欄
+            TextField("翻訳するとここに入ります", text: $viewModel.back, axis: .vertical)
+                .focused($focusedField, equals: .back)
+                .lineLimit(4...10)
+                .font(.body)
+                .padding(.top, 4)
+
+            // 裏面→表面の逆翻訳ボタン（小さめ・控えめ）
+            if !viewModel.back.isEmpty {
+                Divider().padding(.top, 8)
+                translateFromBackButton
+            }
+
+            // 自然な表現ボタン（翻訳完了後に表示）
+            if viewModel.canGenerateExpressions {
+                Divider().padding(.top, 4)
+                naturalExpressionsButton
+            }
+        }
+    }
+
+    // MARK: - 表面→裏面 翻訳ボタン
+
+    private var translateFromFrontButton: some View {
+        Button {
+            focusedField = nil
+            viewModel.translateFrontToBack = true
+            Task { await viewModel.translateOnce() }
         } label: {
-            VStack(spacing: 2) {
-                Text(label)
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-                Text(langLabel(language))
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundColor(color)
+            HStack(spacing: 6) {
+                if viewModel.isTranslating && viewModel.translateFrontToBack {
+                    ProgressView().scaleEffect(0.8)
+                    Text("翻訳中…").foregroundColor(.secondary)
+                } else {
+                    Image(systemName: "arrow.down.circle.fill")
+                        .foregroundColor(.blue)
+                    Text("\(langLabel(viewModel.frontLanguage))→\(langLabel(viewModel.backLanguage))に翻訳")
+                        .foregroundColor(.blue)
+                        .fontWeight(.medium)
+                }
+                Spacer()
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(color.opacity(0.1))
-            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .font(.subheadline)
+            .padding(.top, 8)
         }
         .buttonStyle(.plain)
+        .disabled(viewModel.front.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                  || viewModel.isTranslating)
     }
 
-    // MARK: - 表面セクション
+    // MARK: - 裏面→表面 逆翻訳ボタン（控えめ）
 
-    private var frontSection: some View {
-        Section {
-            TextField("入力してください", text: $viewModel.front, axis: .vertical)
-                .focused($focusedField, equals: .front)
-                .lineLimit(3...6)
-        } header: {
-            HStack {
-                Circle().fill(Color.blue).frame(width: 8, height: 8)
-                Text("表面（\(langLabel(viewModel.frontLanguage))）")
-            }
-        }
-    }
-
-    // MARK: - 翻訳ボタン
-
-    private var translateButtonSection: some View {
-        Section {
-            Button {
-                focusedField = nil
-                Task { await viewModel.translateOnce() }
-            } label: {
-                HStack {
-                    if viewModel.isTranslating {
-                        ProgressView().padding(.trailing, 4)
-                        Text("翻訳中...")
-                    } else {
-                        Image(systemName: "arrow.triangle.2.circlepath")
-                        Text("\(viewModel.sourceLabel)から\(viewModel.targetLabel)へ翻訳")
-                    }
+    private var translateFromBackButton: some View {
+        Button {
+            focusedField = nil
+            viewModel.translateFrontToBack = false
+            Task { await viewModel.translateOnce() }
+        } label: {
+            HStack(spacing: 4) {
+                if viewModel.isTranslating && !viewModel.translateFrontToBack {
+                    ProgressView().scaleEffect(0.7)
+                    Text("翻訳中…")
+                } else {
+                    Image(systemName: "arrow.up.circle")
+                    Text("\(langLabel(viewModel.backLanguage))→\(langLabel(viewModel.frontLanguage))に翻訳")
                 }
-                .font(.headline)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
+                Spacer()
             }
-            .disabled(viewModel.sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || viewModel.isTranslating)
+            .font(.caption)
+            .foregroundColor(.secondary)
+            .padding(.top, 6)
         }
-    }
-
-    // MARK: - 裏面セクション
-
-    private var backSection: some View {
-        Section {
-            TextField("入力してください", text: $viewModel.back, axis: .vertical)
-                .focused($focusedField, equals: .back)
-                .lineLimit(3...6)
-        } header: {
-            HStack {
-                Circle().fill(Color.orange).frame(width: 8, height: 8)
-                Text("裏面（\(langLabel(viewModel.backLanguage))）")
-            }
-        } footer: {
-            Text("直接編集もできます")
-        }
+        .buttonStyle(.plain)
+        .disabled(viewModel.back.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                  || viewModel.isTranslating)
     }
 
     // MARK: - 自然な表現ボタン
 
-    private var naturalExpressionsButtonSection: some View {
-        Section {
-            Button {
-                focusedField = nil
-                Task { await viewModel.generateNaturalExpressions() }
-            } label: {
-                HStack {
-                    if viewModel.isGeneratingExpressions {
-                        ProgressView().padding(.trailing, 4)
-                        Text("生成中...")
-                    } else {
-                        Image(systemName: "sparkles")
-                        Text("自然な表現を見る（\(settingsService.settings.candidateCount)件）")
-                    }
+    private var naturalExpressionsButton: some View {
+        Button {
+            focusedField = nil
+            Task { await viewModel.generateNaturalExpressions() }
+        } label: {
+            HStack(spacing: 6) {
+                if viewModel.isGeneratingExpressions {
+                    ProgressView().scaleEffect(0.8)
+                    Text("生成中…").foregroundColor(.secondary)
+                } else {
+                    Image(systemName: "sparkles")
+                        .foregroundColor(.purple)
+                    Text("ネイティブらしい言い回しを見る")
+                        .foregroundColor(.purple)
+                        .fontWeight(.medium)
+                    Spacer()
+                    Text("\(settingsService.settings.candidateCount)件")
+                        .foregroundColor(.secondary)
+                        .font(.caption)
                 }
-                .font(.subheadline)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 6)
             }
-            .disabled(viewModel.isGeneratingExpressions)
-        } footer: {
-            Text("AIがネイティブらしい\(langLabel(viewModel.targetLanguage))表現を提案します")
+            .font(.subheadline)
+            .padding(.top, 8)
         }
+        .buttonStyle(.plain)
+        .disabled(viewModel.isGeneratingExpressions)
     }
 
     // MARK: - 自然な表現一覧
 
-    @ViewBuilder
-    private var naturalExpressionsSection: some View {
-        Section {
+    private var naturalExpressionsCard: some View {
+        cardContainer {
+            HStack {
+                Image(systemName: "sparkles").foregroundColor(.purple)
+                Text("AI候補").font(.subheadline.weight(.semibold))
+                Spacer()
+            }
+            .padding(.bottom, 4)
+
             ForEach(Array(viewModel.naturalExpressions.enumerated()), id: \.offset) { index, expr in
                 Button {
                     viewModel.selectExpression(at: index)
                     if index == 1 {
                         debugTapCount += 1
-                        if debugTapCount >= 10 {
-                            debugTapCount = 0
-                            showDebugAlert = true
-                        }
-                    } else {
-                        debugTapCount = 0
-                    }
+                        if debugTapCount >= 10 { debugTapCount = 0; showDebugAlert = true }
+                    } else { debugTapCount = 0 }
                 } label: {
                     HStack {
-                        Text(expr).foregroundColor(.primary)
+                        Text(expr)
+                            .foregroundColor(.primary)
+                            .multilineTextAlignment(.leading)
                         Spacer()
-                        Image(systemName: viewModel.selectedExpressionIndex == index
-                              ? "checkmark.circle.fill" : "circle")
-                            .foregroundColor(viewModel.selectedExpressionIndex == index ? .blue : .gray)
+                        if viewModel.selectedExpressionIndex == index {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(.blue)
+                        } else {
+                            Image(systemName: "circle")
+                                .foregroundColor(.secondary.opacity(0.5))
+                        }
                     }
+                    .padding(.vertical, 6)
+                }
+                .buttonStyle(.plain)
+
+                if index < viewModel.naturalExpressions.count - 1 {
+                    Divider()
                 }
             }
-        } header: {
-            Text("自然な表現（AI候補）")
         }
         .alert("AI生出力（デバッグ）", isPresented: $showDebugAlert) {
-            Button("コピー") {
-                UIPasteboard.general.string = viewModel.rawAIOutput ?? "(なし)"
-            }
+            Button("コピー") { UIPasteboard.general.string = viewModel.rawAIOutput ?? "(なし)" }
             Button("閉じる", role: .cancel) {}
         } message: {
             Text(viewModel.rawAIOutput ?? "(まだ生成していません)")
         }
     }
 
-    // MARK: - オプション欄
+    // MARK: - メモ欄
 
-    private var optionalFieldsSection: some View {
-        Section {
-            TextField("メモを入力（任意）", text: $viewModel.note, axis: .vertical)
+    private var noteField: some View {
+        cardContainer {
+            cardHeader(title: "メモ（任意）", langCode: nil, onSelect: nil)
+            TextField("補足メモを書いておけます", text: $viewModel.note, axis: .vertical)
                 .focused($focusedField, equals: .note)
-                .lineLimit(2...4)
-        } header: {
-            Text("メモ（任意）")
+                .lineLimit(2...5)
+                .font(.body)
+                .padding(.top, 4)
         }
+    }
+
+    // MARK: - 共通パーツ
+
+    /// 白い角丸カード型コンテナ
+    private func cardContainer<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            content()
+        }
+        .padding(16)
+        .background(Color(uiColor: .secondarySystemGroupedBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+    }
+
+    /// カードヘッダー（タイトル ＋ 言語選択メニュー）
+    @ViewBuilder
+    private func cardHeader(title: String, langCode: String?, onSelect: ((String) -> Void)?) -> some View {
+        HStack {
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundColor(.secondary)
+            Spacer()
+            if let code = langCode, let onSelect {
+                Menu {
+                    ForEach(supportedLanguages, id: \.code) { lang in
+                        Button {
+                            onSelect(lang.code)
+                        } label: {
+                            if lang.code == code {
+                                Label(lang.label, systemImage: "checkmark")
+                            } else {
+                                Text(lang.label)
+                            }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 3) {
+                        Text(langLabel(code))
+                            .font(.caption.weight(.semibold))
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.system(size: 9, weight: .semibold))
+                    }
+                    .foregroundColor(.blue)
+                }
+            }
+        }
+        .padding(.bottom, 4)
     }
 
     // MARK: - 保存
 
     private func saveCard() {
         if isEditing, let existingCard = card {
-            let updated = viewModel.updateCard(existingCard)
-            cardsViewModel.updateCard(updated)
+            cardsViewModel.updateCard(viewModel.updateCard(existingCard))
         } else {
             if let newCard = viewModel.createCard(for: collection.id) {
                 cardsViewModel.createCard(newCard)
