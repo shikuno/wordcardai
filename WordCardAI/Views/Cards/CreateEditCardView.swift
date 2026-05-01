@@ -1,4 +1,10 @@
 import SwiftUI
+#if os(iOS)
+import UIKit
+#endif
+#if os(macOS)
+import AppKit
+#endif
 
 // サポートする言語の一覧
 private let supportedLanguages: [(code: String, label: String)] = [
@@ -30,8 +36,10 @@ struct CreateEditCardView: View {
     let card: WordCard?
     private let isEditing: Bool
 
-    @State private var debugTapCount = 0
-    @State private var showDebugAlert = false
+    @State private var showDeleteConfirm = false
+    @State private var showErrorDialog = false
+    @State private var showErrorDebugSheet = false
+    @State private var didTriggerErrorDebugLongPress = false
 
     enum Field { case front, back, note }
 
@@ -57,9 +65,6 @@ struct CreateEditCardView: View {
                 VStack(spacing: 20) {
                     frontCard
                     backCard
-                    if !viewModel.naturalExpressions.isEmpty {
-                        naturalExpressionsCard
-                    }
                     noteField
                 }
                 .padding(.horizontal, 16)
@@ -67,10 +72,31 @@ struct CreateEditCardView: View {
             }
             .background(Color(uiColor: .systemGroupedBackground))
             .navigationTitle(isEditing ? "カード編集" : "カード作成")
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("キャンセル") { dismiss() }
+                }
+                if isEditing {
+                    #if os(iOS)
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button(role: .destructive) {
+                            showDeleteConfirm = true
+                        } label: {
+                            Image(systemName: "trash").foregroundColor(.red)
+                        }
+                    }
+                    #else
+                    ToolbarItem {
+                        Button(role: .destructive) {
+                            showDeleteConfirm = true
+                        } label: {
+                            Image(systemName: "trash").foregroundColor(.red)
+                        }
+                    }
+                    #endif
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("保存") { saveCard() }
@@ -78,14 +104,71 @@ struct CreateEditCardView: View {
                         .disabled(!viewModel.isValid)
                 }
             }
+            .sheet(isPresented: $viewModel.showCandidatePicker) {
+                CandidatePickerSheet(
+                    title: viewModel.pickerTitle,
+                    candidates: viewModel.pickerCandidates,
+                    targetLabel: viewModel.pickerTargetIsFront ? "表面" : "裏面",
+                    debugInfo: viewModel.rawAIOutput,
+                    onSelect: { viewModel.applyCandidate($0) },
+                    onCancel: { viewModel.showCandidatePicker = false }
+                )
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+            }
+            .confirmationDialog("このカードを削除しますか？", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+                Button("削除する", role: .destructive) {
+                    if let existingCard = card {
+                        cardsViewModel.deleteCard(existingCard)
+                    }
+                    dismiss()
+                }
+                Button("キャンセル", role: .cancel) {}
+            } message: {
+                Text("削除したカードは元に戻せません")
+            }
             .onAppear {
                 if let card { viewModel.loadCard(card) }
                 focusedField = .front
             }
-            .alert("エラー", isPresented: .constant(viewModel.errorMessage != nil)) {
-                Button("OK") { viewModel.errorMessage = nil }
-            } message: {
-                if let error = viewModel.errorMessage { Text(error) }
+            .onChange(of: viewModel.errorMessage) { _, newValue in
+                showErrorDialog = (newValue != nil)
+            }
+            .overlay {
+                if showErrorDialog, let error = viewModel.errorMessage {
+                    errorOverlay(message: error)
+                }
+            }
+            .sheet(isPresented: $showErrorDebugSheet) {
+                NavigationStack {
+                    ScrollView {
+                        Text(viewModel.rawAIOutput ?? "(デバッグ情報なし)")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding()
+                            .textSelection(.enabled)
+                    }
+                    .navigationTitle("エラーデバッグ情報")
+                    #if os(iOS)
+                    .navigationBarTitleDisplayMode(.inline)
+                    #endif
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("閉じる") {
+                                showErrorDebugSheet = false
+                            }
+                        }
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("コピー") {
+                                #if os(iOS)
+                                UIPasteboard.general.string = viewModel.rawAIOutput ?? "(デバッグ情報なし)"
+                                #elseif os(macOS)
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(viewModel.rawAIOutput ?? "(デバッグ情報なし)", forType: .string)
+                                #endif
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -107,10 +190,17 @@ struct CreateEditCardView: View {
                 .font(.body)
                 .padding(.top, 4)
 
-            Divider().padding(.top, 8)
+            Divider()
+                .padding(.top, 8)
 
-            // 翻訳ボタン（入力欄の直下）
-            translateFromFrontButton
+            // 翻訳 ＋ 言い換えを横並びに
+            HStack(spacing: 12) {
+                translateFromFrontButton
+                Divider().frame(height: 28)
+                naturalExpressionsButton
+            }
+            .padding(.top, 6)
+            .padding(.bottom, 2)
         }
     }
 
@@ -118,30 +208,28 @@ struct CreateEditCardView: View {
 
     private var backCard: some View {
         cardContainer {
-            // ヘッダー：「裏面」ラベル ＋ 言語選択
             cardHeader(title: "裏面", langCode: viewModel.backLanguage) { code in
                 viewModel.backLanguage = code
                 settingsService.updateBackLanguage(code)
             }
 
-            // 入力欄
             TextField("翻訳するとここに入ります", text: $viewModel.back, axis: .vertical)
                 .focused($focusedField, equals: .back)
                 .lineLimit(4...10)
                 .font(.body)
                 .padding(.top, 4)
 
-            // 裏面→表面の逆翻訳ボタン（小さめ・控えめ）
-            if !viewModel.back.isEmpty {
-                Divider().padding(.top, 8)
-                translateFromBackButton
-            }
+            Divider()
+                .padding(.top, 8)
 
-            // 自然な表現ボタン（翻訳完了後に表示）
-            if viewModel.canGenerateExpressions {
-                Divider().padding(.top, 4)
-                naturalExpressionsButton
+            // 逆翻訳 ＋ 言い換えを常に表示
+            HStack(spacing: 12) {
+                translateFromBackButton
+                Divider().frame(height: 28)
+                naturalExpressionsReverseButton
             }
+            .padding(.top, 6)
+            .padding(.bottom, 2)
         }
     }
 
@@ -153,28 +241,23 @@ struct CreateEditCardView: View {
             viewModel.translateFrontToBack = true
             Task { await viewModel.translateOnce() }
         } label: {
-            HStack(spacing: 6) {
+            HStack(spacing: 4) {
                 if viewModel.isTranslating && viewModel.translateFrontToBack {
-                    ProgressView().scaleEffect(0.8)
-                    Text("翻訳中…").foregroundColor(.secondary)
+                    ProgressView().scaleEffect(0.65)
                 } else {
                     Image(systemName: "arrow.down.circle.fill")
-                        .foregroundColor(.blue)
-                    Text("\(langLabel(viewModel.frontLanguage))→\(langLabel(viewModel.backLanguage))に翻訳")
-                        .foregroundColor(.blue)
-                        .fontWeight(.medium)
                 }
-                Spacer()
+                Text("翻訳")
             }
-            .font(.subheadline)
-            .padding(.top, 8)
+            .font(.subheadline.weight(.medium))
+            .foregroundColor(.blue)
+            .padding(.horizontal, 8)
         }
         .buttonStyle(.plain)
-        .disabled(viewModel.front.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                  || viewModel.isTranslating)
+        .disabled(viewModel.front.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || viewModel.isTranslating)
     }
 
-    // MARK: - 裏面→表面 逆翻訳ボタン（控えめ）
+    // MARK: - 裏面→表面 逆翻訳ボタン
 
     private var translateFromBackButton: some View {
         Button {
@@ -184,100 +267,64 @@ struct CreateEditCardView: View {
         } label: {
             HStack(spacing: 4) {
                 if viewModel.isTranslating && !viewModel.translateFrontToBack {
-                    ProgressView().scaleEffect(0.7)
-                    Text("翻訳中…")
+                    ProgressView().scaleEffect(0.65)
                 } else {
-                    Image(systemName: "arrow.up.circle")
-                    Text("\(langLabel(viewModel.backLanguage))→\(langLabel(viewModel.frontLanguage))に翻訳")
+                    Image(systemName: "arrow.up.circle.fill")
                 }
-                Spacer()
+                Text("翻訳")
             }
-            .font(.caption)
-            .foregroundColor(.secondary)
-            .padding(.top, 6)
+            .font(.subheadline.weight(.medium))
+            .foregroundColor(.blue)
+            .padding(.horizontal, 8)
         }
         .buttonStyle(.plain)
-        .disabled(viewModel.back.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                  || viewModel.isTranslating)
+        .disabled(viewModel.back.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || viewModel.isTranslating)
     }
 
-    // MARK: - 自然な表現ボタン
+    // MARK: - 自然な表現ボタン（表面→裏面）
 
     private var naturalExpressionsButton: some View {
         Button {
             focusedField = nil
             Task { await viewModel.generateNaturalExpressions() }
         } label: {
-            HStack(spacing: 6) {
+            HStack(spacing: 4) {
                 if viewModel.isGeneratingExpressions {
-                    ProgressView().scaleEffect(0.8)
-                    Text("生成中…").foregroundColor(.secondary)
+                    ProgressView().scaleEffect(0.65)
                 } else {
                     Image(systemName: "sparkles")
-                        .foregroundColor(.purple)
-                    Text("ネイティブらしい言い回しを見る")
-                        .foregroundColor(.purple)
-                        .fontWeight(.medium)
-                    Spacer()
-                    Text("\(settingsService.settings.candidateCount)件")
-                        .foregroundColor(.secondary)
-                        .font(.caption)
                 }
+                Text("AIで自然な表現を生成")
             }
-            .font(.subheadline)
-            .padding(.top, 8)
+            .font(.subheadline.weight(.medium))
+            .foregroundColor(.purple)
+            .frame(maxWidth: .infinity)
         }
         .buttonStyle(.plain)
-        .disabled(viewModel.isGeneratingExpressions)
+        .disabled(viewModel.front.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || viewModel.isGeneratingExpressions)
     }
 
-    // MARK: - 自然な表現一覧
+    // MARK: - 自然な表現ボタン（裏面→表面）
 
-    private var naturalExpressionsCard: some View {
-        cardContainer {
-            HStack {
-                Image(systemName: "sparkles").foregroundColor(.purple)
-                Text("AI候補").font(.subheadline.weight(.semibold))
-                Spacer()
-            }
-            .padding(.bottom, 4)
-
-            ForEach(Array(viewModel.naturalExpressions.enumerated()), id: \.offset) { index, expr in
-                Button {
-                    viewModel.selectExpression(at: index)
-                    if index == 1 {
-                        debugTapCount += 1
-                        if debugTapCount >= 10 { debugTapCount = 0; showDebugAlert = true }
-                    } else { debugTapCount = 0 }
-                } label: {
-                    HStack {
-                        Text(expr)
-                            .foregroundColor(.primary)
-                            .multilineTextAlignment(.leading)
-                        Spacer()
-                        if viewModel.selectedExpressionIndex == index {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundColor(.blue)
-                        } else {
-                            Image(systemName: "circle")
-                                .foregroundColor(.secondary.opacity(0.5))
-                        }
-                    }
-                    .padding(.vertical, 6)
+    private var naturalExpressionsReverseButton: some View {
+        Button {
+            focusedField = nil
+            Task { await viewModel.generateNaturalExpressionsReverse() }
+        } label: {
+            HStack(spacing: 4) {
+                if viewModel.isGeneratingExpressionsReverse {
+                    ProgressView().scaleEffect(0.65)
+                } else {
+                    Image(systemName: "sparkles")
                 }
-                .buttonStyle(.plain)
-
-                if index < viewModel.naturalExpressions.count - 1 {
-                    Divider()
-                }
+                Text("AIで自然な表現を生成")
             }
+            .font(.subheadline.weight(.medium))
+            .foregroundColor(.purple)
+            .frame(maxWidth: .infinity)
         }
-        .alert("AI生出力（デバッグ）", isPresented: $showDebugAlert) {
-            Button("コピー") { UIPasteboard.general.string = viewModel.rawAIOutput ?? "(なし)" }
-            Button("閉じる", role: .cancel) {}
-        } message: {
-            Text(viewModel.rawAIOutput ?? "(まだ生成していません)")
-        }
+        .buttonStyle(.plain)
+        .disabled(viewModel.back.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || viewModel.isGeneratingExpressionsReverse)
     }
 
     // MARK: - メモ欄
@@ -351,6 +398,59 @@ struct CreateEditCardView: View {
             }
         }
         dismiss()
+    }
+
+    // MARK: - 削除
+
+    private func deleteCard() {
+        if let existingCard = card {
+            cardsViewModel.deleteCard(existingCard)
+        }
+        dismiss()
+    }
+
+    private func errorOverlay(message: String) -> some View {
+        ZStack {
+            Color.black.opacity(0.35)
+                .ignoresSafeArea()
+
+            VStack(spacing: 14) {
+                Text("エラー")
+                    .font(.headline)
+
+                Text(message)
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Button {
+                    if didTriggerErrorDebugLongPress {
+                        didTriggerErrorDebugLongPress = false
+                        return
+                    }
+                    showErrorDialog = false
+                    viewModel.errorMessage = nil
+                } label: {
+                    Text("OK")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                }
+                .buttonStyle(.borderedProminent)
+                .simultaneousGesture(
+                    LongPressGesture(minimumDuration: 5)
+                        .onEnded { _ in
+                            didTriggerErrorDebugLongPress = true
+                            showErrorDebugSheet = true
+                        }
+                )
+            }
+            .padding(18)
+            .background(Color(uiColor: .secondarySystemBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .padding(.horizontal, 24)
+        }
     }
 }
 

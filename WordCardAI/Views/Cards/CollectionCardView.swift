@@ -66,6 +66,7 @@ struct CollectionCardView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .toolbar {
+            #if os(iOS)
             ToolbarItemGroup(placement: .topBarTrailing) {
                 Button {
                     showingCreateCard = true
@@ -83,6 +84,25 @@ struct CollectionCardView: View {
                     Image(systemName: "line.3.horizontal.decrease.circle")
                 }
             }
+            #else
+            ToolbarItemGroup {
+                Button {
+                    showingCreateCard = true
+                } label: {
+                    Image(systemName: "plus")
+                }
+                Button {
+                    showingList = true
+                } label: {
+                    Image(systemName: "rectangle.stack.fill")
+                }
+                Button {
+                    showingDisplaySettings = true
+                } label: {
+                    Image(systemName: "line.3.horizontal.decrease.circle")
+                }
+            }
+            #endif
         }
         .onAppear {
             refreshCards()
@@ -333,10 +353,15 @@ struct CollectionCardView: View {
 
     /// カードテキスト表示（固定サイズ・UILabelで折り返し制御）
     private func adaptiveText(_ text: String, maxLength: Int) -> some View {
+        #if canImport(UIKit)
+        let textColor = UIColor(named: "CardText") ?? .label
+        #else
+        let textColor = UIColor.label
+        #endif
         return CardTextLabel(
             text: text,
             font: .systemFont(ofSize: 22, weight: .semibold),
-            color: UIColor(named: "CardText") ?? .label,
+            color: textColor,
             alignment: .center
         )
     }

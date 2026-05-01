@@ -46,6 +46,18 @@ class CollectionsViewModel: ObservableObject {
         }
     }
 
+    func renameCollection(_ collection: CardCollection, title: String) {
+        let trimmedTitle = title.trimmed
+        guard !trimmedTitle.isEmpty else {
+            errorMessage = "デッキ名を入力してください"
+            return
+        }
+
+        var updated = collection
+        updated.title = trimmedTitle
+        updateCollection(updated)
+    }
+
     /// カードが追加・更新・削除された際に呼び出してデッキの更新日時を記録する
     func touchUpdatedAt(collectionId: UUID) {
         if let index = collections.firstIndex(where: { $0.id == collectionId }) {

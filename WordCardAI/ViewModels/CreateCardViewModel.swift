@@ -36,13 +36,23 @@ class CreateCardViewModel: ObservableObject {
     var sourceLabel: String { translateFrontToBack ? "表面" : "裏面" }
 
     // MARK: - Step1 状態
-    @Published var translatedText: String = ""
     @Published var isTranslating: Bool = false
 
-    // MARK: - Step2 状態
+    // MARK: - Step2 状態（表面→裏面）
     @Published var naturalExpressions: [String] = []
     @Published var selectedExpressionIndex: Int?
     @Published var isGeneratingExpressions: Bool = false
+
+    // MARK: - Step2 状態（裏面→表面）
+    @Published var naturalExpressionsReverse: [String] = []
+    @Published var selectedExpressionReverseIndex: Int?
+    @Published var isGeneratingExpressionsReverse: Bool = false
+
+    // MARK: - 候補選択シート
+    @Published var showCandidatePicker: Bool = false
+    @Published var pickerCandidates: [String] = []
+    @Published var pickerTargetIsFront: Bool = false   // true = 表面に入れる、false = 裏面に入れる
+    @Published var pickerTitle: String = ""
 
     // MARK: - 共通
     @Published var errorMessage: String?
@@ -50,6 +60,53 @@ class CreateCardViewModel: ObservableObject {
 
     private let translationService: TranslationServiceProtocol
     private let naturalExpressionCount: Int
+
+    private func buildDebugInfo(
+        procedure: [String],
+        sourceText: String? = nil,
+        intermediateText: String? = nil
+    ) -> String {
+        let steps = procedure.enumerated().map { index, step in
+            "\(index + 1). \(step)"
+        }.joined(separator: "\n")
+
+        var sections: [String] = [
+            "【生成手順】\n\(steps)"
+        ]
+
+        if let sourceText, !sourceText.isEmpty {
+            sections.append("【元テキスト】\n\(sourceText)")
+        }
+        if let intermediateText, !intermediateText.isEmpty {
+            sections.append("【中間翻訳】\n\(intermediateText)")
+        }
+
+        sections.append("【実行ログ（どの経路を通ったか）】\n\(FoundationModelsTranslationService.lastFlowLog)")
+        sections.append("【プロンプト】\n\(FoundationModelsTranslationService.lastPrompt)")
+        sections.append("【AI生出力（無加工）】\n\(FoundationModelsTranslationService.lastRawOutput)")
+
+        return sections.joined(separator: "\n\n")
+    }
+
+    private func buildErrorDebugInfo(
+        stage: String,
+        procedure: [String],
+        sourceText: String? = nil,
+        intermediateText: String? = nil,
+        error: Error? = nil
+    ) -> String {
+        var debugInfo = buildDebugInfo(
+            procedure: procedure,
+            sourceText: sourceText,
+            intermediateText: intermediateText
+        )
+
+        debugInfo += "\n\n【失敗箇所】\n\(stage)"
+        if let error {
+            debugInfo += "\n\n【エラー詳細】\n\(error.localizedDescription)"
+        }
+        return debugInfo
+    }
 
     var isValid: Bool {
         front.isNotEmpty && back.isNotEmpty
@@ -60,7 +117,11 @@ class CreateCardViewModel: ObservableObject {
     }
 
     var canGenerateExpressions: Bool {
-        !translatedText.isEmpty && !isTranslating
+        !back.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isTranslating
+    }
+
+    var canGenerateExpressionsReverse: Bool {
+        !front.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isTranslating
     }
 
     init(translationService: TranslationServiceProtocol,
@@ -90,25 +151,32 @@ class CreateCardViewModel: ObservableObject {
 
     func toggleDirection() {
         translateFrontToBack.toggle()
-        // 方向を変えたら翻訳結果・候補をリセット
-        translatedText = ""
         naturalExpressions = []
         selectedExpressionIndex = nil
+        naturalExpressionsReverse = []
+        selectedExpressionReverseIndex = nil
         errorMessage = nil
     }
 
-    // MARK: - Step 1: 翻訳（1件）
+    // MARK: - Step 1: 翻訳（1件）→ 候補シートを開く
 
     func translateOnce() async {
         let src = sourceText
         guard !src.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             errorMessage = "\(sourceLabel)のテキストを入力してください"
+            rawAIOutput = buildErrorDebugInfo(
+                stage: "翻訳開始前: 入力チェック",
+                procedure: [
+                    "\(sourceLabel)テキストを入力として受け取る",
+                    "翻訳エンジンで \(sourceLanguage) → \(targetLanguage) の翻訳を実行",
+                    "翻訳結果を候補として表示する"
+                ],
+                sourceText: src
+            )
             return
         }
         isTranslating = true
         errorMessage = nil
-        naturalExpressions = []
-        selectedExpressionIndex = nil
 
         do {
             let result = try await translationService.translateOnce(
@@ -116,62 +184,158 @@ class CreateCardViewModel: ObservableObject {
                 sourceLanguage: sourceLanguage,
                 targetLanguage: targetLanguage
             )
-            translatedText = result
-            // 翻訳先フィールドに自動セット
-            if translateFrontToBack {
-                back = result
-            } else {
-                front = result
-            }
+            rawAIOutput = buildDebugInfo(
+                procedure: [
+                    "\(sourceLabel)テキストを入力として受け取る",
+                    "翻訳エンジンで \(sourceLanguage) → \(targetLanguage) の翻訳を実行",
+                    "翻訳結果を候補として表示する"
+                ],
+                sourceText: src
+            )
+            // 直接セットせずシートで選ばせる
+            pickerCandidates = [result]
+            pickerTargetIsFront = !translateFrontToBack
+            pickerTitle = "\(sourceLabel)の翻訳結果"
+            showCandidatePicker = true
         } catch {
+            rawAIOutput = buildErrorDebugInfo(
+                stage: "翻訳実行",
+                procedure: [
+                    "\(sourceLabel)テキストを入力として受け取る",
+                    "翻訳エンジンで \(sourceLanguage) → \(targetLanguage) の翻訳を実行",
+                    "翻訳結果を候補として表示する"
+                ],
+                sourceText: src,
+                error: error
+            )
             errorMessage = "翻訳に失敗しました: \(error.localizedDescription)"
         }
         isTranslating = false
     }
 
-    // MARK: - Step 2: 自然な表現を N 件生成
+    // MARK: - Step 2: 自然な表現を N 件生成（表面→裏面）→ 候補シートを開く
 
     func generateNaturalExpressions() async {
-        let base = translatedText.isEmpty ? (translateFrontToBack ? back : front) : translatedText
-        guard !base.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            errorMessage = "翻訳結果がありません"
+        let base = front.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !base.isEmpty else {
+            errorMessage = "表面のテキストを入力してください"
+            rawAIOutput = buildErrorDebugInfo(
+                stage: "自然な表現生成開始前: 入力チェック",
+                procedure: [
+                    "表面テキストを受け取る",
+                    "表面言語 \(frontLanguage) から裏面言語 \(backLanguage) へ、自然な表現を直接 \(naturalExpressionCount) 件生成する",
+                    "生成候補を一覧表示する"
+                ],
+                sourceText: base
+            )
             return
         }
         isGeneratingExpressions = true
         errorMessage = nil
 
         do {
-            let results = try await translationService.generateNaturalExpressions(
+            let results = try await translationService.generateNaturalExpressionsDirect(
                 from: base,
-                targetLanguage: targetLanguage,
+                sourceLanguage: frontLanguage,
+                targetLanguage: backLanguage,
                 count: naturalExpressionCount
             )
-            rawAIOutput = """
-            【ベーステキスト】
-            \(base)
-
-            【AI生出力（無加工）】
-            \(FoundationModelsTranslationService.lastRawOutput)
-            """
+            rawAIOutput = buildDebugInfo(
+                procedure: [
+                    "表面テキストを受け取る",
+                    "表面言語 \(frontLanguage) から裏面言語 \(backLanguage) へ、自然な表現を直接 \(naturalExpressionCount) 件生成する",
+                    "生成候補を一覧表示する"
+                ],
+                sourceText: base
+            )
             naturalExpressions = results
-            if !results.isEmpty { selectExpression(at: 0) }
+            pickerCandidates = results
+            pickerTargetIsFront = false
+            pickerTitle = "AIが生成した自然な表現（裏面用）"
+            showCandidatePicker = true
         } catch {
+            rawAIOutput = buildErrorDebugInfo(
+                stage: "自然な表現生成（表面→裏面）",
+                procedure: [
+                    "表面テキストを受け取る",
+                    "表面言語 \(frontLanguage) から裏面言語 \(backLanguage) へ、自然な表現を直接 \(naturalExpressionCount) 件生成する",
+                    "生成候補を一覧表示する"
+                ],
+                sourceText: base,
+                error: error
+            )
             errorMessage = "自然な表現の生成に失敗しました: \(error.localizedDescription)"
             naturalExpressions = []
         }
         isGeneratingExpressions = false
     }
 
-    // MARK: - 表現を選択
+    // MARK: - Step 2: 自然な表現を N 件生成（裏面→表面）→ 候補シートを開く
 
-    func selectExpression(at index: Int) {
-        guard index < naturalExpressions.count else { return }
-        selectedExpressionIndex = index
-        if translateFrontToBack {
-            back = naturalExpressions[index]
-        } else {
-            front = naturalExpressions[index]
+    func generateNaturalExpressionsReverse() async {
+        let base = back.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !base.isEmpty else {
+            errorMessage = "裏面のテキストを入力してください"
+            rawAIOutput = buildErrorDebugInfo(
+                stage: "自然な表現生成開始前: 入力チェック",
+                procedure: [
+                    "裏面テキストを受け取る",
+                    "裏面言語 \(backLanguage) から表面言語 \(frontLanguage) へ、自然な表現を直接 \(naturalExpressionCount) 件生成する",
+                    "生成候補を一覧表示する"
+                ],
+                sourceText: base
+            )
+            return
         }
+        isGeneratingExpressionsReverse = true
+        errorMessage = nil
+
+        do {
+            let results = try await translationService.generateNaturalExpressionsDirect(
+                from: base,
+                sourceLanguage: backLanguage,
+                targetLanguage: frontLanguage,
+                count: naturalExpressionCount
+            )
+            naturalExpressionsReverse = results
+            rawAIOutput = buildDebugInfo(
+                procedure: [
+                    "裏面テキストを受け取る",
+                    "裏面言語 \(backLanguage) から表面言語 \(frontLanguage) へ、自然な表現を直接 \(naturalExpressionCount) 件生成する",
+                    "生成候補を一覧表示する"
+                ],
+                sourceText: base
+            )
+            pickerCandidates = results
+            pickerTargetIsFront = true
+            pickerTitle = "AIが生成した自然な表現（表面用）"
+            showCandidatePicker = true
+        } catch {
+            rawAIOutput = buildErrorDebugInfo(
+                stage: "自然な表現生成（裏面→表面）",
+                procedure: [
+                    "裏面テキストを受け取る",
+                    "裏面言語 \(backLanguage) から表面言語 \(frontLanguage) へ、自然な表現を直接 \(naturalExpressionCount) 件生成する",
+                    "生成候補を一覧表示する"
+                ],
+                sourceText: base,
+                error: error
+            )
+            errorMessage = "自然な表現の生成に失敗しました: \(error.localizedDescription)"
+            naturalExpressionsReverse = []
+        }
+        isGeneratingExpressionsReverse = false
+    }
+
+    // MARK: - 候補を選択して入力欄にセット
+
+    func applyCandidate(_ text: String) {
+        if pickerTargetIsFront {
+            front = text
+        } else {
+            back = text
+        }
+        showCandidatePicker = false
     }
 
     // MARK: - カード保存
@@ -203,9 +367,11 @@ class CreateCardViewModel: ObservableObject {
         back = ""
         note = ""
         tagsText = ""
-        translatedText = ""
-        naturalExpressions = []
         selectedExpressionIndex = nil
+        naturalExpressionsReverse = []
+        selectedExpressionReverseIndex = nil
+        pickerCandidates = []
+        showCandidatePicker = false
         errorMessage = nil
         translateFrontToBack = true
     }

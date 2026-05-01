@@ -12,6 +12,9 @@ struct CollectionsListView: View {
     @ObservedObject var cardsViewModel: CardsViewModel
     @State private var showingCreateSheet = false
     @State private var showingSettings = false
+    @State private var editingCollection: CardCollection?
+    @State private var pendingDeleteCollections: [CardCollection] = []
+    @State private var showDeleteConfirmation = false
     
     init(storage: StorageProtocol, cardsViewModel: CardsViewModel) {
         _viewModel = StateObject(wrappedValue: CollectionsViewModel(storage: storage))
@@ -56,6 +59,9 @@ struct CollectionsListView: View {
             .sheet(isPresented: $showingCreateSheet) {
                 CreateCollectionView(viewModel: viewModel)
             }
+            .sheet(item: $editingCollection) { collection in
+                EditCollectionView(collection: collection, viewModel: viewModel)
+            }
             .sheet(isPresented: $showingSettings) {
                 NavigationStack {
                     SettingsView()
@@ -77,10 +83,45 @@ struct CollectionsListView: View {
                         cardCount: cardsViewModel.cardCount(for: collection.id)
                     )
                 }
+                .contextMenu {
+                    Button {
+                        editingCollection = collection
+                    } label: {
+                        Label("名前を編集", systemImage: "pencil")
+                    }
+                    Button(role: .destructive) {
+                        pendingDeleteCollections = [collection]
+                        showDeleteConfirmation = true
+                    } label: {
+                        Label("削除", systemImage: "trash")
+                    }
+                }
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                    Button {
+                        editingCollection = collection
+                    } label: {
+                        Label("編集", systemImage: "pencil")
+                    }
+                    .tint(.blue)
+                }
             }
-            .onDelete(perform: deleteCollections)
+            .onDelete(perform: confirmDeleteCollections)
         }
         .listStyle(.plain)
+        .confirmationDialog(
+            "このデッキを削除しますか？",
+            isPresented: $showDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("削除する", role: .destructive) {
+                deletePendingCollections()
+            }
+            Button("キャンセル", role: .cancel) {
+                pendingDeleteCollections = []
+            }
+        } message: {
+            Text(deleteConfirmationMessage)
+        }
     }
     
     private var emptyStateView: some View {
@@ -100,12 +141,24 @@ struct CollectionsListView: View {
         }
     }
     
-    private func deleteCollections(at offsets: IndexSet) {
-        for index in offsets {
-            let collection = viewModel.collections[index]
+    private var deleteConfirmationMessage: String {
+        if pendingDeleteCollections.count == 1, let collection = pendingDeleteCollections.first {
+            return "「\(collection.title)」を削除します。デッキ内のカードもすべて削除され、この操作は元に戻せません。"
+        }
+        return "\(pendingDeleteCollections.count) 個のデッキを削除します。デッキ内のカードもすべて削除され、この操作は元に戻せません。"
+    }
+
+    private func confirmDeleteCollections(at offsets: IndexSet) {
+        pendingDeleteCollections = offsets.map { viewModel.collections[$0] }
+        showDeleteConfirmation = !pendingDeleteCollections.isEmpty
+    }
+
+    private func deletePendingCollections() {
+        for collection in pendingDeleteCollections {
             cardsViewModel.deleteCards(for: collection.id)
             viewModel.deleteCollection(collection)
         }
+        pendingDeleteCollections = []
     }
 }
 

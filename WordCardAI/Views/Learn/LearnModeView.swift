@@ -52,7 +52,9 @@ struct LearnModeView: View {
             }
             .padding(step == .conversation ? 0 : 16)
             .navigationTitle(navTitle)
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button {

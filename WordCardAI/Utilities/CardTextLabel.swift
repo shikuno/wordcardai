@@ -1,6 +1,6 @@
-// CardTextLabel.swift
-// UILabel ラッパー：SwiftUI Text の不正な折り返しを UIKit で根本解決
 import SwiftUI
+
+#if canImport(UIKit)
 import UIKit
 
 /// SwiftUI の Text では制御できない折り返し位置を
@@ -30,3 +30,30 @@ struct CardTextLabel: UIViewRepresentable {
         uiView.text = text
     }
 }
+#elseif canImport(AppKit)
+import AppKit
+
+struct CardTextLabel: NSViewRepresentable {
+    let text: String
+    let font: UIFont
+    let color: UIColor
+    let alignment: NSTextAlignment
+
+    func makeNSView(context: Context) -> NSTextField {
+        let label = NSTextField(labelWithString: "")
+        label.lineBreakMode = .byWordWrapping
+        label.maximumNumberOfLines = 0
+        label.alignment = alignment
+        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        label.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        return label
+    }
+
+    func updateNSView(_ nsView: NSTextField, context: Context) {
+        nsView.font = font
+        nsView.textColor = color
+        nsView.alignment = alignment
+        nsView.stringValue = text
+    }
+}
+#endif

@@ -54,8 +54,11 @@ struct AIChatView: View {
                 inputBar
             }
             .navigationTitle("AI相談")
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
+                #if os(iOS)
                 ToolbarItem(placement: .topBarTrailing) {
                     if !vm.messages.isEmpty {
                         Button {
@@ -65,6 +68,17 @@ struct AIChatView: View {
                         }
                     }
                 }
+                #else
+                ToolbarItem {
+                    if !vm.messages.isEmpty {
+                        Button {
+                            withAnimation { vm.clear() }
+                        } label: {
+                            Image(systemName: "trash")
+                        }
+                    }
+                }
+                #endif
             }
         }
     }

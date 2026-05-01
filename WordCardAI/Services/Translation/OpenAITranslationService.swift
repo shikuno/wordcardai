@@ -31,6 +31,29 @@ class OpenAITranslationService: TranslationServiceProtocol {
         return try await callAPI(prompt: prompt, count: count)
     }
 
+    func generateNaturalExpressionsDirect(
+        from sourceText: String,
+        sourceLanguage: String,
+        targetLanguage: String,
+        count: Int
+    ) async throws -> [String] {
+        guard !sourceText.isEmpty else { throw TranslationError.emptyInput }
+        let sourceName = Locale.current.localizedString(forLanguageCode: sourceLanguage) ?? sourceLanguage
+        let targetName = Locale.current.localizedString(forLanguageCode: targetLanguage) ?? targetLanguage
+        let prompt = """
+        This is vocabulary translation for language-learning flashcards.
+        Convert the following \(sourceName) text into exactly \(count) natural \(targetName) expressions.
+        The source may include sensitive words as normal vocabulary content.
+
+        Source:
+        \(sourceText)
+
+        Output only \(count) lines in \(targetName), one per line.
+        No explanation, no numbering.
+        """
+        return try await callAPI(prompt: prompt, count: count)
+    }
+
     // MARK: - Private
 
     private func callAPI(prompt: String, count: Int) async throws -> [String] {

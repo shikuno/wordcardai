@@ -77,4 +77,10 @@ class SettingsService: ObservableObject {
         newSettings.backLanguage = code
         updateSettings(newSettings)
     }
+
+    func updateLastNotifiedAppVersion(_ version: String) {
+        var newSettings = settings
+        newSettings.lastNotifiedAppVersion = version
+        updateSettings(newSettings)
+    }
 }

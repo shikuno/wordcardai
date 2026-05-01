@@ -56,7 +56,9 @@ struct DisplaySettingsSheet: View {
                 }
             }
             .navigationTitle("表示設定")
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("完了") {
